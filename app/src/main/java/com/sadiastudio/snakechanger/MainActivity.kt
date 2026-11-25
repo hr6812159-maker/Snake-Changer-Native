@@ -1,5 +1,6 @@
 package com.sadiastudio.snakechanger
 
+import android.animation.ValueAnimator
 import android.content.Context
 import android.content.Intent
 import android.graphics.Canvas
@@ -8,13 +9,13 @@ import android.graphics.Paint
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.net.Uri
-import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
+import android.view.animation.DecelerateInterpolator
 import android.webkit.WebView
 import android.widget.Button
 import android.widget.FrameLayout
@@ -39,7 +40,6 @@ class MainActivity : AppCompatActivity() {
     private lateinit var drawerLayout: DrawerLayout
     private lateinit var gameView: GameView
 
-    // Top & HUD views
     private lateinit var bannerWebView: WebView
     private lateinit var playerIdText: TextView
     private lateinit var unlockInfoText: TextView
@@ -49,18 +49,17 @@ class MainActivity : AppCompatActivity() {
     private lateinit var speedTopText: TextView
     private lateinit var soundTopText: TextView
 
-    // Loading overlay views
     private lateinit var loadingOverlay: FrameLayout
     private lateinit var stepViews: List<TextView>
     private lateinit var progressBarFill: View
     private lateinit var loadPercentText: TextView
     private lateinit var tapToEnterBtn: Button
 
-    // Overlay panels for Settings, Levels, Spin Wheel, Shop, Profile
     private lateinit var panelContainer: FrameLayout
     private var loadingTimer: Runnable? = null
     private var loadProgress = 0
     private var loadingFinished = false
+    private var wheelAnimator: ValueAnimator? = null
 
     private var coins: Int = GameData.START_COINS
     private var highScore: Int = 0
@@ -74,9 +73,6 @@ class MainActivity : AppCompatActivity() {
     private var vibOn: Boolean = true
     private var trailOn: Boolean = true
     private var playerId: String = ""
-
-    private var backPressCount = 0
-    private val backResetRunnable = Runnable { backPressCount = 0 }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -173,7 +169,7 @@ class MainActivity : AppCompatActivity() {
             setScrimColor(Color.argb(170, 0, 0, 0))
         }
 
-        // Main vertical screen structure (Top -> Bottom)
+        // Main column shifted down so empty space is at top & ad/game sit lower
         val mainColumn = LinearLayout(this).apply {
             layoutParams = DrawerLayout.LayoutParams(
                 DrawerLayout.LayoutParams.MATCH_PARENT,
@@ -181,16 +177,45 @@ class MainActivity : AppCompatActivity() {
             )
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
-            setPadding(dp(10), dp(10), dp(10), dp(10))
+            setPadding(dp(10), dp(12), dp(10), dp(10))
             setBackgroundColor(Color.parseColor("#080810"))
         }
 
-        // 1. Top Banner Ad
-        val bannerBox = FrameLayout(this).apply {
-            layoutParams = LinearLayout.LayoutParams(dp(320), dp(50)).apply {
+        // Top empty space + MENU & SET buttons near top
+        val topSpaceAndNav = LinearLayout(this).apply {
+            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(130)).apply {
                 bottomMargin = dp(8)
             }
-            background = makeBoxDrawable("#111111", "#3300ffff", 8f, 1)
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.TOP
+        }
+
+        val topNavRow = LinearLayout(this).apply {
+            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        val leftMenuBtn = makeSmallActionBtn("MENU") {
+            drawerLayout.openDrawer(GravityCompat.START)
+        }
+        val topSpacer = View(this).apply {
+            layoutParams = LinearLayout.LayoutParams(0, dp(1), 1f)
+        }
+        val rightSetBtn = makeSmallActionBtn("SET") {
+            drawerLayout.openDrawer(GravityCompat.END)
+        }
+        topNavRow.addView(leftMenuBtn)
+        topNavRow.addView(topSpacer)
+        topNavRow.addView(rightSetBtn)
+        topSpaceAndNav.addView(topNavRow)
+        mainColumn.addView(topSpaceAndNav)
+
+        // Banner Ad area at top
+        val bannerBox = FrameLayout(this).apply {
+            layoutParams = LinearLayout.LayoutParams(dp(340), dp(64)).apply {
+                bottomMargin = dp(10)
+            }
+            background = makeBoxDrawable("#111111", "#4400ffff", 10f, 1)
             clipToOutline = true
         }
         bannerWebView = WebView(this).apply {
@@ -203,7 +228,7 @@ class MainActivity : AppCompatActivity() {
         bannerBox.addView(bannerWebView)
         mainColumn.addView(bannerBox)
 
-        // 2. Player Box
+        // Player Box
         val playerBox = LinearLayout(this).apply {
             layoutParams = LinearLayout.LayoutParams(dp(360), ViewGroup.LayoutParams.WRAP_CONTENT).apply {
                 bottomMargin = dp(8)
@@ -264,7 +289,7 @@ class MainActivity : AppCompatActivity() {
         playerBox.addView(curLvBadgeText)
         mainColumn.addView(playerBox)
 
-        // 3. Game Board Wrap + Top HUD Bar
+        // Game Board + Top HUD
         val gameWrap = LinearLayout(this).apply {
             layoutParams = LinearLayout.LayoutParams(dp(360), ViewGroup.LayoutParams.WRAP_CONTENT).apply {
                 bottomMargin = dp(10)
@@ -358,11 +383,9 @@ class MainActivity : AppCompatActivity() {
         gameWrap.addView(canvasFrame)
         mainColumn.addView(gameWrap)
 
-        // 4. Control Buttons (D-Pad: Up, Left, OK, Right, Down)
+        // D-Pad Controls
         val dpadGrid = LinearLayout(this).apply {
-            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-                bottomMargin = dp(8)
-            }
+            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT)
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
         }
@@ -399,40 +422,11 @@ class MainActivity : AppCompatActivity() {
         dpadGrid.addView(rowBot)
         mainColumn.addView(dpadGrid)
 
-        // Quick drawer hint & triggers
-        val drawerHintRow = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER
-        }
-        val leftMenuBtn = makeSmallActionBtn("MENU") {
-            drawerLayout.openDrawer(GravityCompat.START)
-        }
-        val hintText = TextView(this).apply {
-            text = "  ← Swipe or Tap Menu / Set →  "
-            setTextColor(Color.parseColor("#777777"))
-            textSize = 9f
-        }
-        val rightSetBtn = makeSmallActionBtn("SET") {
-            drawerLayout.openDrawer(GravityCompat.END)
-        }
-        drawerHintRow.addView(leftMenuBtn)
-        drawerHintRow.addView(hintText)
-        drawerHintRow.addView(rightSetBtn)
-        mainColumn.addView(drawerHintRow)
-
         drawerLayout.addView(mainColumn)
-
-        // Left Drawer: Shop, Levels, Spin Wheel, Exit
-        val leftDrawer = buildLeftDrawer()
-        drawerLayout.addView(leftDrawer)
-
-        // Right Drawer: Settings, Sound, Pause
-        val rightDrawer = buildRightDrawer()
-        drawerLayout.addView(rightDrawer)
-
+        drawerLayout.addView(buildLeftDrawer())
+        drawerLayout.addView(buildRightDrawer())
         hostFrame.addView(drawerLayout)
 
-        // Dedicated overlay container for Settings, Levels, Spin Wheel, Shop, Profile
         panelContainer = FrameLayout(this).apply {
             layoutParams = FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
@@ -445,7 +439,6 @@ class MainActivity : AppCompatActivity() {
         }
         hostFrame.addView(panelContainer)
 
-        // 5-Step Loading Overlay
         loadingOverlay = buildLoadingOverlay()
         hostFrame.addView(loadingOverlay)
 
@@ -481,7 +474,7 @@ class MainActivity : AppCompatActivity() {
             })
             addView(makeDrawerBtn("EXIT APP", "#ff4444", "#ffffff") {
                 drawerLayout.closeDrawers()
-                confirmExitApp()
+                finishAffinity()
             })
         }
     }
@@ -509,7 +502,7 @@ class MainActivity : AppCompatActivity() {
                 drawerLayout.closeDrawers()
                 toggleSound()
             })
-            addView(makeDrawerBtn("OK PAUSE", "#00ffff", "#000000") {
+            addView(makeDrawerBtn("OK PAUSE/PLAY", "#00ffff", "#000000") {
                 drawerLayout.closeDrawers()
                 gameView.togglePauseMatch()
             })
@@ -682,7 +675,6 @@ class MainActivity : AppCompatActivity() {
         gameView.startNewMatch(autoBegin = false)
     }
 
-    // Dedicated section: Settings & Privacy
     private fun openSettingsPanel() {
         gameView.pauseMatch()
         showPanel(title = "SETTINGS & PRIVACY POLICY - ${GameData.GAME_NAME}") { body ->
@@ -808,7 +800,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // Dedicated section: Levels (15 Levels + 15 Snake Models)
     private fun openLevelsPanel() {
         gameView.pauseMatch()
         showPanel(title = "LEVELS - 15 Levels 15 Snakes") { body ->
@@ -893,7 +884,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // Dedicated section: Spin Wheel (Rewarded Ad ONLY here)
     private fun openSpinWheelPanel() {
         gameView.pauseMatch()
         showPanel(title = "SPIN WHEEL - Reward 1500/2000/3000 Coins") { body ->
@@ -925,7 +915,7 @@ class MainActivity : AppCompatActivity() {
                     super.onDraw(canvas)
                     val cx = width * 0.5f
                     val cy = height * 0.5f
-                    val radius = (minOf(width, height) * 0.45f)
+                    val radius = minOf(width, height) * 0.45f
 
                     canvas.save()
                     canvas.rotate(angleDeg, cx, cy)
@@ -984,13 +974,25 @@ class MainActivity : AppCompatActivity() {
                 adManager.showSpinRewardedAd(
                     onRewardGranted = {
                         val reward = GameData.spinRewards[Random.nextInt(GameData.spinRewards.size)]
-                        wheelView.angleDeg += (1440 + Random.nextInt(360)).toFloat()
-                        wheelView.invalidate()
-                        uiHandler.postDelayed({
-                            updateCoins(coins + reward)
-                            resultText.text = "Won +$reward Coins! Total: $coins"
-                            spinBtn.isEnabled = true
-                        }, 600)
+                        val startAngle = wheelView.angleDeg % 360f
+                        val targetAngle = startAngle + 1440f + Random.nextInt(360).toFloat()
+                        wheelAnimator?.cancel()
+                        wheelAnimator = ValueAnimator.ofFloat(startAngle, targetAngle).apply {
+                            duration = 2200L
+                            interpolator = DecelerateInterpolator()
+                            addUpdateListener { anim ->
+                                wheelView.angleDeg = anim.animatedValue as Float
+                                wheelView.invalidate()
+                            }
+                            addListener(object : android.animation.AnimatorListenerAdapter() {
+                                override fun onAnimationEnd(animation: android.animation.Animator) {
+                                    updateCoins(coins + reward)
+                                    resultText.text = "Won +$reward Coins! Total: $coins"
+                                    spinBtn.isEnabled = true
+                                }
+                            })
+                            start()
+                        }
                     }
                 )
             }
@@ -999,7 +1001,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // Dedicated section: Shop (4 Tabs: Food Shape, Body Pattern, Full Compact, Head Char)
     private fun openShopPanel(activeTab: Int) {
         gameView.pauseMatch()
         showPanel(title = "SHOP UNIQUE - 4 Types") { body ->
@@ -1214,6 +1215,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun closePanel() {
+        wheelAnimator?.cancel()
         panelContainer.visibility = View.GONE
         panelContainer.removeAllViews()
         gameView.invalidate()
@@ -1241,17 +1243,6 @@ class MainActivity : AppCompatActivity() {
         gameView.applyTheme(currentLevel, selectedFood, selectedBody, selectedFull, selectedHead)
     }
 
-    private fun confirmExitApp() {
-        AlertDialog.Builder(this)
-            .setTitle("Exit ${GameData.GAME_NAME}?")
-            .setMessage("Your progress is saved. ID: $playerId")
-            .setPositiveButton("EXIT") { _, _ ->
-                finishAffinity()
-            }
-            .setNegativeButton("CANCEL", null)
-            .show()
-    }
-
     private fun showSimpleDialog(title: String, message: String) {
         AlertDialog.Builder(this)
             .setTitle(title)
@@ -1270,14 +1261,7 @@ class MainActivity : AppCompatActivity() {
             drawerLayout.closeDrawers()
             return
         }
-        backPressCount++
-        if (backPressCount == 1) {
-            showSimpleDialog("Exit Reminder", "Press Back again to exit ${GameData.GAME_NAME}.")
-            uiHandler.removeCallbacks(backResetRunnable)
-            uiHandler.postDelayed(backResetRunnable, 2000)
-        } else {
-            finishAffinity()
-        }
+        finishAffinity()
     }
 
     override fun onPause() {
@@ -1287,8 +1271,8 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        wheelAnimator?.cancel()
         loadingTimer?.let { uiHandler.removeCallbacks(it) }
-        uiHandler.removeCallbacks(backResetRunnable)
         gameView.stopLoop()
         adManager.destroy()
     }
