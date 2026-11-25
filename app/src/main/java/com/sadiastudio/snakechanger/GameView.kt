@@ -423,8 +423,11 @@ class GameView @JvmOverloads constructor(
             drawSpecialSgsCoin(canvas, sx, sy, unit * 0.44f)
         }
 
-        val bItem = GameData.safeBody(bodyIdx)
-        val fbItem = GameData.safeFull(fullIdx)
+        // Level-distinct snake model & palette so each level looks unique
+        val effectiveFullIdx = ((lvlCfg.full + fullIdx) % GameData.fullBodies.size)
+        val effectiveBodyIdx = ((curLv - 1 + bodyIdx) % GameData.bodyItems.size)
+        val bItem = GameData.safeBody(effectiveBodyIdx)
+        val fbItem = GameData.safeFull(effectiveFullIdx)
         val hItem = GameData.safeHead(headIdx)
 
         for (i in snake.indices) {
@@ -433,11 +436,11 @@ class GameView @JvmOverloads constructor(
             val cy = seg.y * cellH + cellH * 0.5f
 
             if (i == 0) {
-                drawHeadCharacter(canvas, cx, cy, unit * 0.42f, hItem)
+                drawHeadCharacter(canvas, cx, cy, unit * 0.42f, hItem, lvlCfg.trailHex)
             } else if (i % 2 == 0) {
-                drawCompactBodyModel(canvas, cx, cy, unit, fbItem)
+                drawCompactBodyModel(canvas, cx, cy, unit, fbItem, curLv)
             } else {
-                drawBodyPattern(canvas, cx, cy, unit * 0.32f, bItem, i)
+                drawBodyPattern(canvas, cx, cy, unit * 0.32f, bItem, i, curLv)
             }
         }
     }
@@ -590,8 +593,27 @@ class GameView @JvmOverloads constructor(
         canvas.drawText("SGS", x, y + textPaint.textSize * 0.35f, textPaint)
     }
 
-    private fun drawBodyPattern(canvas: Canvas, x: Float, y: Float, r: Float, item: BodyItem, idx: Int) {
-        val color = parseColorSafe(item.colorHex, Color.RED)
+    private fun levelAccentColor(level: Int, fallbackHex: String): Int {
+        val levelPalette = listOf(
+            "#00f5d4", "#ffbe0b", "#fb5607", "#ff006e", "#8338ec",
+            "#3a86ff", "#06d6a0", "#ffd166", "#ef476f", "#118ab2",
+            "#aacc00", "#f72585", "#4cc9f0", "#f9c74f", "#90be6d"
+        )
+        val idx = (level - 1).coerceIn(0, levelPalette.lastIndex)
+        return parseColorSafe(levelPalette[idx], parseColorSafe(fallbackHex, Color.CYAN))
+    }
+
+    private fun drawBodyPattern(
+        canvas: Canvas,
+        x: Float,
+        y: Float,
+        r: Float,
+        item: BodyItem,
+        idx: Int,
+        level: Int
+    ) {
+        val baseColor = parseColorSafe(item.colorHex, Color.RED)
+        val color = if (idx % 3 == 0) levelAccentColor(level, item.colorHex) else baseColor
         paint.reset()
         paint.isAntiAlias = true
 
@@ -703,10 +725,17 @@ class GameView @JvmOverloads constructor(
         }
     }
 
-    private fun drawCompactBodyModel(canvas: Canvas, x: Float, y: Float, unit: Float, fb: FullBodyItem) {
+    private fun drawCompactBodyModel(
+        canvas: Canvas,
+        x: Float,
+        y: Float,
+        unit: Float,
+        fb: FullBodyItem,
+        level: Int
+    ) {
         val scale = (fb.size / 4.5f).coerceIn(0.5f, 1.15f)
         val r = unit * 0.32f * scale
-        val dotColor = parseColorSafe(fb.dotHex, Color.CYAN)
+        val dotColor = levelAccentColor(level, fb.dotHex)
         val centerColor = parseColorSafe(fb.centerHex, Color.WHITE)
 
         paint.reset()
@@ -774,7 +803,14 @@ class GameView @JvmOverloads constructor(
         }
     }
 
-    private fun drawHeadCharacter(canvas: Canvas, x: Float, y: Float, r: Float, head: HeadItem) {
+    private fun drawHeadCharacter(
+        canvas: Canvas,
+        x: Float,
+        y: Float,
+        r: Float,
+        head: HeadItem,
+        levelTrailHex: String
+    ) {
         paint.reset()
         paint.isAntiAlias = true
         paint.style = Paint.Style.FILL
@@ -782,8 +818,8 @@ class GameView @JvmOverloads constructor(
         canvas.drawCircle(x, y, r, paint)
 
         paint.style = Paint.Style.STROKE
-        paint.strokeWidth = max(1.2f, r * 0.16f)
-        paint.color = Color.WHITE
+        paint.strokeWidth = max(1.4f, r * 0.18f)
+        paint.color = parseColorSafe(levelTrailHex, Color.WHITE)
         canvas.drawCircle(x, y, r, paint)
 
         textPaint.color = Color.BLACK
