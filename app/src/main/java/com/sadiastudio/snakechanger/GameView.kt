@@ -369,6 +369,22 @@ class GameView @JvmOverloads constructor(
             canvas.drawLine(0f, y, width.toFloat(), y, paint)
         }
 
+        // Draw clear perimeter border / barricade around the play area
+        val borderColor = levelAccentColor(curLv, lvlCfg.trailHex)
+        val borderStroke = max(3f, unit * 0.14f)
+        paint.reset()
+        paint.isAntiAlias = true
+        paint.style = Paint.Style.STROKE
+        paint.strokeWidth = borderStroke
+        paint.color = borderColor
+        canvas.drawRect(
+            borderStroke * 0.5f,
+            borderStroke * 0.5f,
+            width.toFloat() - borderStroke * 0.5f,
+            height.toFloat() - borderStroke * 0.5f,
+            paint
+        )
+
         if (trailOn && trail.isNotEmpty()) {
             for (tp in trail) {
                 val tx = tp.x * cellW + cellW * 0.5f
@@ -423,7 +439,6 @@ class GameView @JvmOverloads constructor(
             drawSpecialSgsCoin(canvas, sx, sy, unit * 0.44f)
         }
 
-        // Level-distinct snake model & palette so each level looks unique
         val effectiveFullIdx = ((lvlCfg.full + fullIdx) % GameData.fullBodies.size)
         val effectiveBodyIdx = ((curLv - 1 + bodyIdx) % GameData.bodyItems.size)
         val bItem = GameData.safeBody(effectiveBodyIdx)
@@ -850,11 +865,19 @@ class GameView @JvmOverloads constructor(
         }
     }
 
-    private fun playTone(freq: Int, durationMs: Int, toneType: Int) {
+    private fun playTone(baseFreq: Int, durationMs: Int, toneType: Int) {
         if (!soundOn) return
         try {
+            val levelShift = (curLv - 1) * 35
+            val tunedFreq = (baseFreq + levelShift).coerceIn(140, 2200)
             val tg = ToneGenerator(AudioManager.STREAM_MUSIC, 80)
-            tg.startTone(toneType, durationMs)
+            val chosenTone = when ((tunedFreq / 120) % 4) {
+                0 -> ToneGenerator.TONE_PROP_BEEP
+                1 -> ToneGenerator.TONE_PROP_BEEP2
+                2 -> ToneGenerator.TONE_PROP_ACK
+                else -> toneType
+            }
+            tg.startTone(chosenTone, durationMs)
             handler.postDelayed({ tg.release() }, durationMs.toLong() + 60L)
         } catch (_: Exception) {
         }
