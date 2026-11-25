@@ -53,7 +53,7 @@ class GameView @JvmOverloads constructor(
     private var specialFood: GridPoint? = null
     private var normalFoodCount = 0
     private var score = 0
-    private val trail: ArrayDeque<TrailPoint> = ArrayDeque()
+    private val trail: MutableList<TrailPoint> = mutableListOf()
 
     private var curLv = 1
     private var foodIdx = 0
@@ -99,9 +99,7 @@ class GameView @JvmOverloads constructor(
         vibOn = vib
         trailOn = trail
         if (!trailOn) {
-                        while (trail.isNotEmpty()) {
-                trail.removeFirst()
-                        }
+            trail.clear()
         }
         invalidate()
     }
@@ -292,9 +290,9 @@ class GameView @JvmOverloads constructor(
 
         val lvlCfg = GameData.safeLevel(curLv)
         if (trailOn) {
-            trail.addFirst(TrailPoint(nextHead.x, nextHead.y, lvlCfg.trailHex))
+            trail.add(0, TrailPoint(nextHead.x, nextHead.y, lvlCfg.trailHex))
             while (trail.size > 8) {
-                trail.removeLast()
+                trail.removeAt(trail.lastIndex)
             }
         } else {
             trail.clear()
@@ -357,7 +355,6 @@ class GameView @JvmOverloads constructor(
         val cellH = height.toFloat() / rows.toFloat()
         val unit = min(cellW, cellH)
 
-        // Subtle grid guide
         paint.reset()
         paint.isAntiAlias = true
         paint.style = Paint.Style.STROKE
@@ -372,7 +369,6 @@ class GameView @JvmOverloads constructor(
             canvas.drawLine(0f, y, width.toFloat(), y, paint)
         }
 
-        // Trail
         if (trailOn && trail.isNotEmpty()) {
             for (tp in trail) {
                 val tx = tp.x * cellW + cellW * 0.5f
@@ -416,20 +412,17 @@ class GameView @JvmOverloads constructor(
             return
         }
 
-        // Normal food
         val fItem = GameData.safeFood(foodIdx)
         val fx = food.x * cellW + cellW * 0.5f
         val fy = food.y * cellH + cellH * 0.5f
         drawFoodShape(canvas, fx, fy, unit * 0.36f, fItem)
 
-        // Special SGS coin food every 10 normal foods
         specialFood?.let { sp ->
             val sx = sp.x * cellW + cellW * 0.5f
             val sy = sp.y * cellH + cellH * 0.5f
             drawSpecialSgsCoin(canvas, sx, sy, unit * 0.44f)
         }
 
-        // Snake segments
         val bItem = GameData.safeBody(bodyIdx)
         val fbItem = GameData.safeFull(fullIdx)
         val hItem = GameData.safeHead(headIdx)
