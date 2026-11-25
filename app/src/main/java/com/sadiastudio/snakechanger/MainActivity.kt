@@ -169,7 +169,6 @@ class MainActivity : AppCompatActivity() {
             setScrimColor(Color.argb(170, 0, 0, 0))
         }
 
-        // Main column shifted down so empty space is at top & ad/game sit lower
         val mainColumn = LinearLayout(this).apply {
             layoutParams = DrawerLayout.LayoutParams(
                 DrawerLayout.LayoutParams.MATCH_PARENT,
@@ -181,7 +180,6 @@ class MainActivity : AppCompatActivity() {
             setBackgroundColor(Color.parseColor("#080810"))
         }
 
-        // Top empty space + MENU & SET buttons near top
         val topSpaceAndNav = LinearLayout(this).apply {
             layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(130)).apply {
                 bottomMargin = dp(8)
@@ -210,9 +208,8 @@ class MainActivity : AppCompatActivity() {
         topSpaceAndNav.addView(topNavRow)
         mainColumn.addView(topSpaceAndNav)
 
-        // Banner Ad area at top
         val bannerBox = FrameLayout(this).apply {
-            layoutParams = LinearLayout.LayoutParams(dp(340), dp(64)).apply {
+            layoutParams = LinearLayout.LayoutParams(dp(340), dp(68)).apply {
                 bottomMargin = dp(10)
             }
             background = makeBoxDrawable("#111111", "#4400ffff", 10f, 1)
@@ -228,7 +225,6 @@ class MainActivity : AppCompatActivity() {
         bannerBox.addView(bannerWebView)
         mainColumn.addView(bannerBox)
 
-        // Player Box
         val playerBox = LinearLayout(this).apply {
             layoutParams = LinearLayout.LayoutParams(dp(360), ViewGroup.LayoutParams.WRAP_CONTENT).apply {
                 bottomMargin = dp(8)
@@ -289,7 +285,6 @@ class MainActivity : AppCompatActivity() {
         playerBox.addView(curLvBadgeText)
         mainColumn.addView(playerBox)
 
-        // Game Board + Top HUD
         val gameWrap = LinearLayout(this).apply {
             layoutParams = LinearLayout.LayoutParams(dp(360), ViewGroup.LayoutParams.WRAP_CONTENT).apply {
                 bottomMargin = dp(10)
@@ -383,7 +378,6 @@ class MainActivity : AppCompatActivity() {
         gameWrap.addView(canvasFrame)
         mainColumn.addView(gameWrap)
 
-        // D-Pad Controls
         val dpadGrid = LinearLayout(this).apply {
             layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT)
             orientation = LinearLayout.VERTICAL
@@ -474,7 +468,7 @@ class MainActivity : AppCompatActivity() {
             })
             addView(makeDrawerBtn("EXIT APP", "#ff4444", "#ffffff") {
                 drawerLayout.closeDrawers()
-                finishAffinity()
+                showExitConfirmDialog()
             })
         }
     }
@@ -507,6 +501,20 @@ class MainActivity : AppCompatActivity() {
                 gameView.togglePauseMatch()
             })
         }
+    }
+
+    private fun showExitConfirmDialog() {
+        gameView.pauseMatch()
+        AlertDialog.Builder(this)
+            .setTitle("EXIT ${GameData.GAME_NAME.uppercase()}")
+            .setMessage("Are you sure you want to exit the game?")
+            .setPositiveButton("YES") { _, _ ->
+                finishAffinity()
+            }
+            .setNegativeButton("NO") { dialog, _ ->
+                dialog.dismiss()
+            }
+            .show()
     }
 
     private fun buildLoadingOverlay(): FrameLayout {
@@ -1261,7 +1269,7 @@ class MainActivity : AppCompatActivity() {
             drawerLayout.closeDrawers()
             return
         }
-        finishAffinity()
+        showExitConfirmDialog()
     }
 
     override fun onPause() {
