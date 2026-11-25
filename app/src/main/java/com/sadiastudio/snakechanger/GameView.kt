@@ -99,7 +99,9 @@ class GameView @JvmOverloads constructor(
         vibOn = vib
         trailOn = trail
         if (!trailOn) {
-            trail.clear()
+                        while (trail.isNotEmpty()) {
+                trail.removeFirst()
+                        }
         }
         invalidate()
     }
