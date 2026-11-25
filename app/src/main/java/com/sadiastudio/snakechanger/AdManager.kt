@@ -6,6 +6,7 @@ import android.graphics.Color
 import android.os.Handler
 import android.os.Looper
 import android.view.Gravity
+import android.view.View
 import android.view.ViewGroup
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
@@ -75,16 +76,15 @@ class AdManager(private val activity: Activity) {
               </style>
             </head>
             <body>
-              <div class="ad-wrap" id="sgs-banner-slot">
-                <script async src="${GameData.MONETAG_SCRIPT_SRC}" data-zone="${GameData.BANNER_ZONE_ID}"></script>
-              </div>
+              <div class="ad-wrap" id="sgs-banner-slot"></div>
               <script>
                 (function() {
+                  var slot = document.getElementById('sgs-banner-slot');
                   var s = document.createElement('script');
                   s.async = true;
                   s.src = '${GameData.MONETAG_SCRIPT_SRC}';
                   s.setAttribute('data-zone', '${GameData.BANNER_ZONE_ID}');
-                  document.body.appendChild(s);
+                  (slot || document.body).appendChild(s);
                 })();
               </script>
             </body>
@@ -109,7 +109,8 @@ class AdManager(private val activity: Activity) {
 
         dismissRewardModal()
 
-        val rootGroup = activity.findViewById<ViewGroup>(android.R.id.content) ?: run {
+        val rootGroup: ViewGroup? = activity.findViewById(android.R.id.content)
+        if (rootGroup == null) {
             onRewardGranted()
             return
         }
@@ -122,6 +123,7 @@ class AdManager(private val activity: Activity) {
             setBackgroundColor(Color.argb(230, 0, 0, 0))
             isClickable = true
             isFocusable = true
+            visibility = View.VISIBLE
         }
 
         val box = LinearLayout(activity).apply {
