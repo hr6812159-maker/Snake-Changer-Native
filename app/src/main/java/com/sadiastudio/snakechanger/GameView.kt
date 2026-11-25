@@ -53,7 +53,7 @@ class GameView @JvmOverloads constructor(
     private var specialFood: GridPoint? = null
     private var normalFoodCount = 0
     private var score = 0
-    private val trail: MutableList<TrailPoint> = mutableListOf()
+    private var trail: MutableList<TrailPoint> = mutableListOf()
 
     private var curLv = 1
     private var foodIdx = 0
@@ -94,12 +94,12 @@ class GameView @JvmOverloads constructor(
         resetBoardState(startWaiting = true)
     }
 
-    fun configureSettings(sound: Boolean, vib: Boolean, trail: Boolean) {
+    fun configureSettings(sound: Boolean, vib: Boolean, trailEnabled: Boolean) {
         soundOn = sound
         vibOn = vib
-        trailOn = trail
+        trailOn = trailEnabled
         if (!trailOn) {
-            trail.clear()
+            trail = mutableListOf()
         }
         invalidate()
     }
@@ -236,7 +236,7 @@ class GameView @JvmOverloads constructor(
             GridPoint(6, 5),
             GridPoint(5, 5)
         )
-        trail.clear()
+        trail = mutableListOf()
         dir = Direction.RIGHT
         ndir = Direction.RIGHT
         score = 0
@@ -295,7 +295,7 @@ class GameView @JvmOverloads constructor(
                 trail.removeAt(trail.lastIndex)
             }
         } else {
-            trail.clear()
+            trail = mutableListOf()
         }
 
         val hitWall = nextHead.x < 0 || nextHead.x >= cols || nextHead.y < 0 || nextHead.y >= rows
