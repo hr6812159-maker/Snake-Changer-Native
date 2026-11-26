@@ -28,6 +28,10 @@ class AdManager(private val activity: Activity) {
     private var isDestroyed = false
     private var hasTriggeredTopAd = false
 
+    fun setTopBannerVisible(visible: Boolean) {
+        topAdWebView?.visibility = if (visible) View.VISIBLE else View.GONE
+    }
+
     @SuppressLint("SetJavaScriptEnabled")
     fun triggerTopBannerAd() {
         if (isDestroyed || activity.isFinishing || hasTriggeredTopAd) return
@@ -38,7 +42,7 @@ class AdManager(private val activity: Activity) {
         val adHolder = WebView(activity).apply {
             layoutParams = FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
-                dp(110),
+                dp(54),
                 Gravity.TOP
             )
             setBackgroundColor(Color.TRANSPARENT)
@@ -71,7 +75,7 @@ class AdManager(private val activity: Activity) {
                   width: 100%;
                   height: 100%;
                   background: transparent;
-                  overflow: visible;
+                  overflow: hidden;
                 }
               </style>
             </head>
@@ -82,7 +86,7 @@ class AdManager(private val activity: Activity) {
         """.trimIndent()
 
         topAdWebView = adHolder
-        rootGroup?.addView(adHolder)
+        rootGroup.addView(adHolder)
         adHolder.loadDataWithBaseURL(
             GameData.MONETAG_BASE_URL,
             html,
@@ -100,6 +104,7 @@ class AdManager(private val activity: Activity) {
         }
 
         dismissRewardModal()
+        setTopBannerVisible(false)
 
         val rootGroup: ViewGroup? = activity.findViewById(android.R.id.content)
         if (rootGroup == null) {
@@ -194,7 +199,7 @@ class AdManager(private val activity: Activity) {
         }
         box.addView(claimBtn)
         overlay.addView(box)
-        rootGroup?.addView(overlay)
+        rootGroup.addView(overlay)
         rewardModal = overlay
 
         var secondsLeft = 3
@@ -226,6 +231,7 @@ class AdManager(private val activity: Activity) {
             (modal.parent as? ViewGroup)?.removeView(modal)
         }
         rewardModal = null
+        setTopBannerVisible(true)
     }
 
     fun destroy() {
