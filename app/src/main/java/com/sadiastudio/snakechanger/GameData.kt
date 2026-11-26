@@ -11,6 +11,11 @@ object GameData {
     const val PACKAGE_NAME = "com.sadiastudio.snakechanger"
     const val UPTODOWN_URL = "https://snake-changer-sgs.en.uptodown.com/android"
 
+    const val MONETAG_BASE_URL = "https://hr6812159-maker.github.io"
+    const val MONETAG_META_TAG = "monetag"
+    const val MONETAG_SCRIPT_SRC = "https://nap5k.com/tag.min.js"
+    const val SPIN_REWARD_ZONE_ID = "12205081"
+
     const val START_COINS = 5
     const val FOODS_PER_POWER_COIN = 10
     const val POWER_COINS_PER_10_FOOD = 1
