@@ -42,7 +42,7 @@ class AdManager(private val activity: Activity) {
         val adHolder = WebView(activity).apply {
             layoutParams = FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
-                dp(54),
+                dp(84),
                 Gravity.TOP
             )
             setBackgroundColor(Color.TRANSPARENT)
@@ -75,7 +75,7 @@ class AdManager(private val activity: Activity) {
                   width: 100%;
                   height: 100%;
                   background: transparent;
-                  overflow: hidden;
+                  overflow: visible;
                 }
               </style>
             </head>
@@ -86,7 +86,7 @@ class AdManager(private val activity: Activity) {
         """.trimIndent()
 
         topAdWebView = adHolder
-                rootGroup?.addView(adHolder)
+        rootGroup?.addView(adHolder)
         adHolder.loadDataWithBaseURL(
             GameData.MONETAG_BASE_URL,
             html,
@@ -199,7 +199,7 @@ class AdManager(private val activity: Activity) {
         }
         box.addView(claimBtn)
         overlay.addView(box)
-        rootGroup.addView(overlay)
+        rootGroup?.addView(overlay)
         rewardModal = overlay
 
         var secondsLeft = 3
