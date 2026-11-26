@@ -8,6 +8,7 @@ import android.os.Looper
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
+import android.webkit.CookieManager
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebSettings
@@ -37,12 +38,15 @@ class AdManager(private val activity: Activity) {
         val adHolder = WebView(activity).apply {
             layoutParams = FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
-                dp(60),
+                dp(110),
                 Gravity.TOP
             )
             setBackgroundColor(Color.TRANSPARENT)
+            CookieManager.getInstance().setAcceptCookie(true)
+            CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
             settings.javaScriptEnabled = true
             settings.domStorageEnabled = true
+            settings.mediaPlaybackRequiresUserGesture = false
             settings.loadWithOverviewMode = true
             settings.useWideViewPort = true
             settings.mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
@@ -78,7 +82,7 @@ class AdManager(private val activity: Activity) {
         """.trimIndent()
 
         topAdWebView = adHolder
-                rootGroup?.addView(adHolder)
+        rootGroup?.addView(adHolder)
         adHolder.loadDataWithBaseURL(
             GameData.MONETAG_BASE_URL,
             html,
