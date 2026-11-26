@@ -86,7 +86,7 @@ class AdManager(private val activity: Activity) {
         """.trimIndent()
 
         topAdWebView = adHolder
-        rootGroup.addView(adHolder)
+                rootGroup?.addView(adHolder)
         adHolder.loadDataWithBaseURL(
             GameData.MONETAG_BASE_URL,
             html,
