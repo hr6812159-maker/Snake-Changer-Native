@@ -190,7 +190,7 @@ class AdManager(private val activity: Activity) {
         }
         box.addView(claimBtn)
         overlay.addView(box)
-        rootGroup.addView(overlay)
+        rootGroup?.addView(overlay)
         rewardModal = overlay
 
         var secondsLeft = 3
