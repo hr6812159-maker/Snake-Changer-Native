@@ -174,22 +174,21 @@ class MainActivity : AppCompatActivity() {
             )
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
-            setPadding(dp(10), dp(44), dp(10), dp(36))
+            setPadding(dp(10), dp(12), dp(10), dp(34))
             setBackgroundColor(Color.parseColor("#080810"))
         }
 
+        // ওপরে ২২০ dp জায়গা ছেড়ে দিয়ে তার নিচে MENU / SET রাখা হয়েছে
         val topSpaceAndNav = LinearLayout(this).apply {
-            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(96)).apply {
-                bottomMargin = dp(8)
+            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(248)).apply {
+                bottomMargin = dp(4)
             }
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.BOTTOM
         }
 
         val topNavRow = LinearLayout(this).apply {
-            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-                topMargin = dp(24)
-            }
+            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
@@ -208,14 +207,15 @@ class MainActivity : AppCompatActivity() {
         topSpaceAndNav.addView(topNavRow)
         mainColumn.addView(topSpaceAndNav)
 
+        // চিকন প্লেয়ার আইডি বক্স (Slim Player Box)
         val playerBox = LinearLayout(this).apply {
             layoutParams = LinearLayout.LayoutParams(dp(360), ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-                bottomMargin = dp(8)
+                bottomMargin = dp(4)
             }
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(10), dp(7), dp(10), dp(7))
-            background = makeBoxDrawable("#111111", "#00ffff", 10f, 2)
+            setPadding(dp(8), dp(2), dp(8), dp(2))
+            background = makeBoxDrawable("#111111", "#00ffff", 8f, 1)
             setOnClickListener { openProfilePanel() }
         }
 
@@ -234,10 +234,10 @@ class MainActivity : AppCompatActivity() {
                 canvas.drawText("SGS", width * 0.5f, height * 0.62f, tp)
             }
         }.apply {
-            layoutParams = LinearLayout.LayoutParams(dp(36), dp(36)).apply {
-                rightMargin = dp(8)
+            layoutParams = LinearLayout.LayoutParams(dp(24), dp(24)).apply {
+                rightMargin = dp(6)
             }
-            background = makeBoxDrawable("#0a0a1a", "#ffffff", 6f, 1)
+            background = makeBoxDrawable("#0a0a1a", "#ffffff", 5f, 1)
         }
         playerBox.addView(avatarView)
 
@@ -247,12 +247,12 @@ class MainActivity : AppCompatActivity() {
         }
         playerIdText = TextView(this).apply {
             setTextColor(Color.CYAN)
-            textSize = 11f
+            textSize = 9.5f
             typeface = Typeface.DEFAULT_BOLD
         }
         unlockInfoText = TextView(this).apply {
             setTextColor(Color.parseColor("#aaaaaa"))
-            textSize = 9f
+            textSize = 8f
         }
         idColumn.addView(playerIdText)
         idColumn.addView(unlockInfoText)
@@ -260,57 +260,57 @@ class MainActivity : AppCompatActivity() {
 
         curLvBadgeText = TextView(this).apply {
             setTextColor(Color.BLACK)
-            textSize = 10f
+            textSize = 8.5f
             typeface = Typeface.DEFAULT_BOLD
-            setPadding(dp(10), dp(4), dp(10), dp(4))
-            background = makeBoxDrawable("#00ffff", "#00ffff", 12f, 0)
+            setPadding(dp(7), dp(2), dp(7), dp(2))
+            background = makeBoxDrawable("#00ffff", "#00ffff", 9f, 0)
         }
         playerBox.addView(curLvBadgeText)
         mainColumn.addView(playerBox)
 
         val gameWrap = LinearLayout(this).apply {
             layoutParams = LinearLayout.LayoutParams(dp(360), ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-                bottomMargin = dp(10)
+                bottomMargin = dp(6)
             }
             orientation = LinearLayout.VERTICAL
         }
 
         val hudBar = LinearLayout(this).apply {
-            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(28)).apply {
+            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(24)).apply {
                 bottomMargin = dp(2)
             }
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             setPadding(dp(8), 0, dp(8), 0)
-            background = makeBoxDrawable("#11111e", "#00ffff", 8f, 1)
+            background = makeBoxDrawable("#11111e", "#00ffff", 7f, 1)
         }
 
         coinTopText = TextView(this).apply {
             layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
             setTextColor(Color.CYAN)
-            textSize = 10f
+            textSize = 9.5f
             typeface = Typeface.DEFAULT_BOLD
         }
         scoreLvTopText = TextView(this).apply {
             layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1.3f)
             setTextColor(Color.parseColor("#ffeb3b"))
-            textSize = 10f
+            textSize = 9.5f
             typeface = Typeface.DEFAULT_BOLD
             gravity = Gravity.CENTER
         }
         speedTopText = TextView(this).apply {
             layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
             setTextColor(Color.CYAN)
-            textSize = 10f
+            textSize = 9.5f
             typeface = Typeface.DEFAULT_BOLD
             gravity = Gravity.END
         }
         soundTopText = TextView(this).apply {
             layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-                leftMargin = dp(8)
+                leftMargin = dp(6)
             }
             setTextColor(Color.parseColor("#00ff88"))
-            textSize = 10f
+            textSize = 9.5f
             typeface = Typeface.DEFAULT_BOLD
             setOnClickListener { toggleSound() }
         }
@@ -322,7 +322,7 @@ class MainActivity : AppCompatActivity() {
         gameWrap.addView(hudBar)
 
         val canvasFrame = FrameLayout(this).apply {
-            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(180))
+            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(164))
             background = makeBoxDrawable("#000000", "#00ffff", 12f, 2)
             clipToOutline = true
         }
@@ -370,7 +370,7 @@ class MainActivity : AppCompatActivity() {
         val rowTop = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
-            setPadding(0, 0, 0, dp(6))
+            setPadding(0, 0, 0, dp(4))
         }
         rowTop.addView(makeControlButton("↑", isOk = false) { gameView.steer(GameView.Direction.UP) })
         dpadGrid.addView(rowTop)
@@ -378,7 +378,7 @@ class MainActivity : AppCompatActivity() {
         val rowMid = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
-            setPadding(0, 0, 0, dp(6))
+            setPadding(0, 0, 0, dp(4))
         }
         rowMid.addView(makeControlButton("←", isOk = false) { gameView.steer(GameView.Direction.LEFT) })
         val okBtn = makeControlButton("OK", isOk = true) { gameView.togglePauseMatch() }.apply {
@@ -426,7 +426,7 @@ class MainActivity : AppCompatActivity() {
         return LinearLayout(this).apply {
             layoutParams = DrawerLayout.LayoutParams(dp(180), DrawerLayout.LayoutParams.MATCH_PARENT, GravityCompat.START)
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(12), dp(20), dp(12), dp(20))
+            setPadding(dp(12), dp(220), dp(12), dp(20))
             setBackgroundColor(Color.parseColor("#0c0c16"))
 
             addView(TextView(this@MainActivity).apply {
@@ -434,7 +434,7 @@ class MainActivity : AppCompatActivity() {
                 setTextColor(Color.CYAN)
                 textSize = 12f
                 typeface = Typeface.DEFAULT_BOLD
-                setPadding(0, 0, 0, dp(12))
+                setPadding(0, 0, 0, dp(10))
             })
 
             addView(makeDrawerBtn("SHOP UNIQUE", "#15151f", "#00ffff") {
@@ -460,7 +460,7 @@ class MainActivity : AppCompatActivity() {
         return LinearLayout(this).apply {
             layoutParams = DrawerLayout.LayoutParams(dp(180), DrawerLayout.LayoutParams.MATCH_PARENT, GravityCompat.END)
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(12), dp(20), dp(12), dp(20))
+            setPadding(dp(12), dp(220), dp(12), dp(20))
             setBackgroundColor(Color.parseColor("#0c0c16"))
 
             addView(TextView(this@MainActivity).apply {
@@ -468,7 +468,7 @@ class MainActivity : AppCompatActivity() {
                 setTextColor(Color.parseColor("#00ff88"))
                 textSize = 12f
                 typeface = Typeface.DEFAULT_BOLD
-                setPadding(0, 0, 0, dp(12))
+                setPadding(0, 0, 0, dp(10))
             })
 
             addView(makeDrawerBtn("SETTINGS", "#00ff88", "#000000") {
@@ -681,31 +681,31 @@ class MainActivity : AppCompatActivity() {
 
             val rateCard = LinearLayout(this).apply {
                 layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-                    bottomMargin = dp(10)
+                    bottomMargin = dp(8)
                 }
                 orientation = LinearLayout.VERTICAL
                 gravity = Gravity.CENTER
-                setPadding(dp(12), dp(12), dp(12), dp(12))
+                setPadding(dp(10), dp(10), dp(10), dp(10))
                 background = makeBoxDrawable("#111111", "#ffeb3b", 12f, 2)
             }
             rateCard.addView(TextView(this).apply {
                 text = "Rating 3+"
                 setTextColor(Color.parseColor("#ffeb3b"))
-                textSize = 13f
+                textSize = 12f
                 typeface = Typeface.DEFAULT_BOLD
             })
             rateCard.addView(TextView(this).apply {
                 text = "Tap to Rate & Write Message (+${GameData.RATE_BONUS_COINS} Bonus Coins)"
                 setTextColor(Color.parseColor("#aaaaaa"))
-                textSize = 10f
-                setPadding(0, dp(4), 0, dp(8))
+                textSize = 9.5f
+                setPadding(0, dp(3), 0, dp(6))
             })
             rateCard.addView(Button(this).apply {
                 text = "RATE US"
                 setTextColor(Color.BLACK)
-                textSize = 11f
+                textSize = 10.5f
                 typeface = Typeface.DEFAULT_BOLD
-                setPadding(dp(20), dp(6), dp(20), dp(6))
+                setPadding(dp(18), dp(5), dp(18), dp(5))
                 background = makeBoxDrawable("#ffeb3b", "#ffeb3b", 20f, 0)
                 setOnClickListener {
                     try {
@@ -740,26 +740,26 @@ class MainActivity : AppCompatActivity() {
 
             val resetRow = LinearLayout(this).apply {
                 layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-                    topMargin = dp(4)
-                    bottomMargin = dp(10)
+                    topMargin = dp(2)
+                    bottomMargin = dp(8)
                 }
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
-                setPadding(dp(12), dp(10), dp(12), dp(10))
+                setPadding(dp(10), dp(8), dp(10), dp(8))
                 background = makeBoxDrawable("#111111", "#222222", 10f, 1)
             }
             resetRow.addView(TextView(this).apply {
                 layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
                 text = "Secure Data Reset (Clears Score Only)"
                 setTextColor(Color.WHITE)
-                textSize = 11f
+                textSize = 10.5f
             })
             resetRow.addView(Button(this).apply {
                 text = "SECURE RESET"
                 setTextColor(Color.WHITE)
-                textSize = 10f
+                textSize = 9.5f
                 typeface = Typeface.DEFAULT_BOLD
-                setPadding(dp(12), dp(6), dp(12), dp(6))
+                setPadding(dp(10), dp(5), dp(10), dp(5))
                 background = makeBoxDrawable("#ff4444", "#ff4444", 18f, 0)
                 setOnClickListener {
                     AlertDialog.Builder(this@MainActivity)
@@ -882,7 +882,7 @@ class MainActivity : AppCompatActivity() {
                 layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
                 orientation = LinearLayout.VERTICAL
                 gravity = Gravity.CENTER_HORIZONTAL
-                setPadding(dp(12), dp(18), dp(12), dp(18))
+                setPadding(dp(12), dp(12), dp(12), dp(12))
             }
 
             val wheelView = object : View(this) {
@@ -932,8 +932,8 @@ class MainActivity : AppCompatActivity() {
                     canvas.drawText("SGS", cx, cy + 7f, labelPaint)
                 }
             }.apply {
-                layoutParams = LinearLayout.LayoutParams(dp(200), dp(200)).apply {
-                    bottomMargin = dp(16)
+                layoutParams = LinearLayout.LayoutParams(dp(180), dp(180)).apply {
+                    bottomMargin = dp(12)
                 }
             }
             wrap.addView(wheelView)
@@ -941,18 +941,18 @@ class MainActivity : AppCompatActivity() {
             val resultText = TextView(this).apply {
                 text = "Current Coins: $coins"
                 setTextColor(Color.parseColor("#00ff88"))
-                textSize = 13f
+                textSize = 12.5f
                 typeface = Typeface.DEFAULT_BOLD
-                setPadding(0, 0, 0, dp(12))
+                setPadding(0, 0, 0, dp(10))
             }
             wrap.addView(resultText)
 
             val spinBtn = Button(this).apply {
                 text = "SPIN WHEEL (+1500 / 2000 / 3000)"
                 setTextColor(Color.BLACK)
-                textSize = 11f
+                textSize = 10.5f
                 typeface = Typeface.DEFAULT_BOLD
-                setPadding(dp(20), dp(10), dp(20), dp(10))
+                setPadding(dp(18), dp(8), dp(18), dp(8))
                 background = GradientDrawable(
                     GradientDrawable.Orientation.LEFT_RIGHT,
                     intArrayOf(Color.CYAN, Color.MAGENTA)
@@ -997,7 +997,7 @@ class MainActivity : AppCompatActivity() {
         showPanel(title = "SHOP UNIQUE - 4 Types") { body ->
             val tabBar = HorizontalScrollView(this).apply {
                 layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-                    bottomMargin = dp(10)
+                    bottomMargin = dp(8)
                 }
             }
             val tabRow = LinearLayout(this).apply {
@@ -1007,14 +1007,14 @@ class MainActivity : AppCompatActivity() {
             tabNames.forEachIndexed { index, label ->
                 val selected = index == activeTab
                 tabRow.addView(Button(this).apply {
-                    layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(34)).apply {
+                    layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(32)).apply {
                         rightMargin = dp(6)
                     }
                     text = label
-                    textSize = 10f
+                    textSize = 9.5f
                     typeface = Typeface.DEFAULT_BOLD
                     setTextColor(if (selected) Color.BLACK else Color.WHITE)
-                    setPadding(dp(12), 0, dp(12), 0)
+                    setPadding(dp(11), 0, dp(11), 0)
                     background = makeBoxDrawable(
                         if (selected) "#00ffff" else "#111111",
                         if (selected) "#00ffff" else "#333333",
@@ -1159,6 +1159,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // প্যানেলের শুরুটাও ওপরের ২২০ dp জায়গার নিচে নামানো হয়েছে
     private fun showPanel(title: String, populate: (LinearLayout) -> Unit) {
         panelContainer.removeAllViews()
         panelContainer.visibility = View.VISIBLE
@@ -1169,7 +1170,7 @@ class MainActivity : AppCompatActivity() {
                 ViewGroup.LayoutParams.MATCH_PARENT
             )
             orientation = LinearLayout.VERTICAL
-            setPadding(0, dp(64), 0, 0)
+            setPadding(0, dp(220), 0, dp(16))
             setBackgroundColor(Color.parseColor("#080810"))
         }
 
@@ -1177,31 +1178,31 @@ class MainActivity : AppCompatActivity() {
             layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(12), dp(10), dp(12), dp(10))
+            setPadding(dp(12), dp(8), dp(12), dp(8))
             setBackgroundColor(Color.BLACK)
         }
         header.addView(TextView(this).apply {
             layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
             text = title
             setTextColor(Color.CYAN)
-            textSize = 12f
+            textSize = 11f
             typeface = Typeface.DEFAULT_BOLD
         })
         header.addView(Button(this).apply {
-            layoutParams = LinearLayout.LayoutParams(dp(36), dp(36))
+            layoutParams = LinearLayout.LayoutParams(dp(34), dp(34))
             text = "X"
             setTextColor(Color.BLACK)
-            textSize = 13f
+            textSize = 12f
             typeface = Typeface.DEFAULT_BOLD
             setPadding(0, 0, 0, 0)
-            background = makeBoxDrawable("#00ffff", "#ffffff", 18f, 2)
+            background = makeBoxDrawable("#00ffff", "#ffffff", 17f, 2)
             setOnClickListener { closePanel() }
         })
         sheet.addView(header)
 
         val scroll = ScrollView(this).apply {
             layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f)
-            setPadding(dp(12), dp(10), dp(12), dp(16))
+            setPadding(dp(12), dp(8), dp(12), dp(12))
         }
         val contentCol = LinearLayout(this).apply {
             layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
@@ -1278,16 +1279,16 @@ class MainActivity : AppCompatActivity() {
 
     private fun makeControlButton(label: String, isOk: Boolean, onClick: () -> Unit): Button {
         return Button(this).apply {
-            layoutParams = LinearLayout.LayoutParams(dp(64), dp(46))
+            layoutParams = LinearLayout.LayoutParams(dp(62), dp(42))
             text = label
-            textSize = if (isOk) 11f else 17f
+            textSize = if (isOk) 10.5f else 16f
             typeface = Typeface.DEFAULT_BOLD
             setTextColor(if (isOk) Color.BLACK else Color.CYAN)
             setPadding(0, 0, 0, 0)
             background = makeBoxDrawable(
                 if (isOk) "#00ffff" else "#15151f",
                 if (isOk) "#00ffff" else "#6600ffff",
-                14f,
+                13f,
                 2
             )
             setOnClickListener { onClick() }
@@ -1296,12 +1297,12 @@ class MainActivity : AppCompatActivity() {
 
     private fun makeSmallActionBtn(label: String, onClick: () -> Unit): Button {
         return Button(this).apply {
-            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(28))
+            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(26))
             text = label
-            textSize = 9f
+            textSize = 8.5f
             typeface = Typeface.DEFAULT_BOLD
             setTextColor(Color.CYAN)
-            setPadding(dp(10), 0, dp(10), 0)
+            setPadding(dp(9), 0, dp(9), 0)
             background = makeBoxDrawable("#15151f", "#6600ffff", 8f, 1)
             setOnClickListener { onClick() }
         }
@@ -1309,11 +1310,11 @@ class MainActivity : AppCompatActivity() {
 
     private fun makeDrawerBtn(label: String, bgHex: String, textHex: String, onClick: () -> Unit): Button {
         return Button(this).apply {
-            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(40)).apply {
-                bottomMargin = dp(8)
+            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(38)).apply {
+                bottomMargin = dp(7)
             }
             text = label
-            textSize = 10f
+            textSize = 9.5f
             typeface = Typeface.DEFAULT_BOLD
             setTextColor(Color.parseColor(textHex))
             background = makeBoxDrawable(bgHex, "#4400ffff", 9f, 1)
@@ -1324,25 +1325,25 @@ class MainActivity : AppCompatActivity() {
     private fun makeToggleRow(label: String, enabled: Boolean, onClick: () -> Unit): LinearLayout {
         return LinearLayout(this).apply {
             layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-                bottomMargin = dp(8)
+                bottomMargin = dp(7)
             }
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(12), dp(10), dp(12), dp(10))
+            setPadding(dp(10), dp(8), dp(10), dp(8))
             background = makeBoxDrawable("#111111", "#222222", 10f, 1)
 
             addView(TextView(this@MainActivity).apply {
                 layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
                 text = label
                 setTextColor(Color.WHITE)
-                textSize = 11f
+                textSize = 10.5f
             })
             addView(Button(this@MainActivity).apply {
                 text = if (enabled) "ON" else "OFF"
                 setTextColor(if (enabled) Color.BLACK else Color.WHITE)
-                textSize = 10f
+                textSize = 9.5f
                 typeface = Typeface.DEFAULT_BOLD
-                setPadding(dp(14), dp(6), dp(14), dp(6))
+                setPadding(dp(12), dp(5), dp(12), dp(5))
                 background = makeBoxDrawable(
                     if (enabled) "#ffeb3b" else "#444444",
                     if (enabled) "#ffeb3b" else "#444444",
@@ -1364,11 +1365,11 @@ class MainActivity : AppCompatActivity() {
     ): LinearLayout {
         return LinearLayout(this).apply {
             layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-                bottomMargin = dp(7)
+                bottomMargin = dp(6)
             }
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(10), dp(9), dp(10), dp(9))
+            setPadding(dp(10), dp(8), dp(10), dp(8))
             background = GradientDrawable(
                 GradientDrawable.Orientation.TL_BR,
                 intArrayOf(Color.parseColor("#15151f"), Color.parseColor("#1a1a2e"))
@@ -1378,7 +1379,7 @@ class MainActivity : AppCompatActivity() {
             }
 
             val dot = View(this@MainActivity).apply {
-                layoutParams = LinearLayout.LayoutParams(dp(12), dp(12)).apply {
+                layoutParams = LinearLayout.LayoutParams(dp(11), dp(11)).apply {
                     rightMargin = dp(8)
                 }
                 background = makeBoxDrawable(colorHex, "#ffffff", 6f, 1)
@@ -1389,7 +1390,7 @@ class MainActivity : AppCompatActivity() {
                 layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
                 text = title
                 setTextColor(Color.WHITE)
-                textSize = 10f
+                textSize = 9.5f
             })
 
             val btnLabel = when {
@@ -1406,9 +1407,9 @@ class MainActivity : AppCompatActivity() {
             addView(Button(this@MainActivity).apply {
                 text = btnLabel
                 setTextColor(Color.BLACK)
-                textSize = 10f
+                textSize = 9.5f
                 typeface = Typeface.DEFAULT_BOLD
-                setPadding(dp(12), dp(6), dp(12), dp(6))
+                setPadding(dp(11), dp(5), dp(11), dp(5))
                 background = makeBoxDrawable(btnBg, btnBg, 18f, 0)
                 setOnClickListener { onClick() }
             })
@@ -1423,24 +1424,24 @@ class MainActivity : AppCompatActivity() {
     ): LinearLayout {
         return LinearLayout(this).apply {
             layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-                bottomMargin = dp(10)
+                bottomMargin = dp(8)
             }
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(12), dp(10), dp(12), dp(10))
+            setPadding(dp(10), dp(8), dp(10), dp(8))
             background = makeBoxDrawable("#111111", borderHex, 12f, 2)
 
             addView(TextView(this@MainActivity).apply {
                 text = title
                 setTextColor(Color.parseColor(titleHex))
-                textSize = 12f
+                textSize = 11f
                 typeface = Typeface.DEFAULT_BOLD
-                setPadding(0, 0, 0, dp(4))
+                setPadding(0, 0, 0, dp(3))
             })
             lines.forEach { line ->
                 addView(TextView(this@MainActivity).apply {
                     text = line
                     setTextColor(Color.parseColor("#cccccc"))
-                    textSize = 10f
+                    textSize = 9.5f
                     setPadding(0, dp(2), 0, dp(2))
                 })
             }
