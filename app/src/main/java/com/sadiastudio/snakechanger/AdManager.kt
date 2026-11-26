@@ -38,7 +38,7 @@ class AdManager(private val activity: Activity) {
         val adWebView = WebView(activity).apply {
             layoutParams = FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
-                dp(76),
+                dp(220),
                 Gravity.TOP
             )
             visibility = View.VISIBLE
@@ -82,7 +82,7 @@ class AdManager(private val activity: Activity) {
         }
 
         topAdWebView = adWebView
-                rootGroup?.addView(adWebView)
+        rootGroup?.addView(adWebView)
     }
 
     fun showSpinRewardedAd(onRewardGranted: () -> Unit) {
