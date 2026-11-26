@@ -27,6 +27,7 @@ import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.pow
 import kotlin.math.sin
 import kotlin.random.Random
 
@@ -39,6 +40,10 @@ class GameView @JvmOverloads constructor(
 ) : View(context, attrs) {
 
     enum class Direction { UP, DOWN, LEFT, RIGHT }
+
+    private val prefs by lazy {
+        context.getSharedPreferences("sgs_snake_changer_prefs", Context.MODE_PRIVATE)
+    }
 
     private val cols = 20
     private val rows = 10
@@ -56,6 +61,7 @@ class GameView @JvmOverloads constructor(
     private var specialFood: GridPoint? = null
     private var normalFoodCount = 0
     private var score = 0
+    private var levelBestScore = 0
     private var trail: MutableList<TrailPoint> = mutableListOf()
 
     private var curLv = 1
@@ -76,9 +82,9 @@ class GameView @JvmOverloads constructor(
         textAlign = Paint.Align.CENTER
     }
 
-    var onHudChanged: ((score: Int, speedMs: Int, level: Int) -> Unit)? = null
-    var onCoinsEarned: ((amount: Int, isSpecial: Boolean) -> Unit)? = null
-    var onGameOver: ((finalScore: Int, level: Int) -> Unit)? = null
+    var onHudChanged: ((score: Int, bestScore: Int, speedMs: Int, level: Int) -> Unit)? = null
+    var onPowerCoinEarned: ((amount: Int, coinName: String, isSpecial: Boolean) -> Unit)? = null
+    var onGameOver: ((finalScore: Int, bestScore: Int, level: Int) -> Unit)? = null
     var onBoardTap: (() -> Unit)? = null
 
     private val gameRunnable = object : Runnable {
@@ -94,7 +100,25 @@ class GameView @JvmOverloads constructor(
     }
 
     init {
+        loadLevelBestScore(1)
         resetBoardState(startWaiting = true)
+    }
+
+    private fun bestScoreKey(level: Int): String = "best_score_lv_${level.coerceIn(1, 15)}"
+
+    private fun loadLevelBestScore(level: Int) {
+        levelBestScore = prefs.getInt(bestScoreKey(level), 0).coerceAtLeast(0)
+    }
+
+    fun getLevelBestScore(level: Int = curLv): Int {
+        return prefs.getInt(bestScoreKey(level), 0).coerceAtLeast(0)
+    }
+
+    private fun checkAndSaveLevelBest() {
+        if (score > levelBestScore) {
+            levelBestScore = score
+            prefs.edit().putInt(bestScoreKey(curLv), levelBestScore).apply()
+        }
     }
 
     fun configureSettings(sound: Boolean, vib: Boolean, trailEnabled: Boolean) {
@@ -109,10 +133,11 @@ class GameView @JvmOverloads constructor(
 
     fun applyTheme(level: Int, fIdx: Int, bIdx: Int, flIdx: Int, hIdx: Int) {
         curLv = level.coerceIn(1, 15)
-        foodIdx = fIdx.coerceIn(0, GameData.foodItems.size - 1)
-        bodyIdx = bIdx.coerceIn(0, GameData.bodyItems.size - 1)
-        fullIdx = flIdx.coerceIn(0, GameData.fullBodies.size - 1)
-        headIdx = hIdx.coerceIn(0, GameData.heads.size - 1)
+        foodIdx = fIdx.coerceIn(0, GameData.foodItems.lastIndex)
+        bodyIdx = bIdx.coerceIn(0, GameData.bodyItems.lastIndex)
+        fullIdx = flIdx.coerceIn(0, GameData.fullBodies.lastIndex)
+        headIdx = hIdx.coerceIn(0, GameData.heads.lastIndex)
+        loadLevelBestScore(curLv)
         notifyHud()
         invalidate()
     }
@@ -131,13 +156,14 @@ class GameView @JvmOverloads constructor(
 
     fun startNewMatch(autoBegin: Boolean = false) {
         stopLoop()
+        loadLevelBestScore(curLv)
         resetBoardState(startWaiting = !autoBegin)
         if (autoBegin) {
             waiting = false
             paused = false
             isGameOver = false
             isRunning = true
-            playTone(420, 90, ToneGenerator.TONE_PROP_BEEP)
+            playSoftTone(440, 80, ToneGenerator.TONE_PROP_BEEP)
             handler.postDelayed(gameRunnable, getSpeedMs().toLong())
         }
         notifyHud()
@@ -189,7 +215,7 @@ class GameView @JvmOverloads constructor(
         paused = false
         handler.removeCallbacks(gameRunnable)
         isRunning = true
-        playTone(650, 70, ToneGenerator.TONE_PROP_BEEP)
+        playSoftTone(587, 65, ToneGenerator.TONE_PROP_BEEP)
         notifyHud()
         handler.postDelayed(gameRunnable, getSpeedMs().toLong())
         invalidate()
@@ -305,9 +331,11 @@ class GameView @JvmOverloads constructor(
             paused = true
             waiting = true
             stopLoop()
-            playTone(180, 350, ToneGenerator.TONE_SUP_ERROR)
-            vibrate(90)
-            onGameOver?.invoke(score, curLv)
+            checkAndSaveLevelBest()
+            playSoftTone(240, 200, ToneGenerator.TONE_SUP_ERROR)
+            vibrate(65)
+            onGameOver?.invoke(score, levelBestScore, curLv)
+            notifyHud()
             return
         }
 
@@ -316,22 +344,27 @@ class GameView @JvmOverloads constructor(
         val sp = specialFood
         if (sp != null && nextHead.x == sp.x && nextHead.y == sp.y) {
             score += 1
+            checkAndSaveLevelBest()
             specialFood = null
             normalFoodCount = 0
             placeNormalFood()
-            playTone(1200, 180, ToneGenerator.TONE_PROP_ACK)
-            vibrate(45)
-            onCoinsEarned?.invoke(GameData.SPECIAL_COIN_EARN, true)
+            playSoftTone(880, 120, ToneGenerator.TONE_PROP_ACK)
+            vibrate(30)
+            onPowerCoinEarned?.invoke(GameData.POWER_COIN_EARN, lvlCfg.coinName, true)
         } else if (nextHead.x == food.x && nextHead.y == food.y) {
             score += 1
+            checkAndSaveLevelBest()
             normalFoodCount += 1
-            if (normalFoodCount % 10 == 0) {
+            if (normalFoodCount % GameData.FOOD_PER_COIN == 0) {
                 placeSpecialFoodSafe()
+                playSoftTone(740, 105, ToneGenerator.TONE_PROP_BEEP2)
+                vibrate(25)
+                onPowerCoinEarned?.invoke(GameData.POWER_COIN_EARN, lvlCfg.coinName, false)
+            } else {
+                playSoftTone(520, 60, ToneGenerator.TONE_PROP_BEEP2)
+                vibrate(12)
             }
             placeNormalFood()
-            playTone(760, 95, ToneGenerator.TONE_PROP_BEEP2)
-            vibrate(20)
-            onCoinsEarned?.invoke(GameData.FOOD_EARN, false)
         } else {
             snake.removeAt(snake.lastIndex)
         }
@@ -340,7 +373,7 @@ class GameView @JvmOverloads constructor(
     }
 
     private fun notifyHud() {
-        onHudChanged?.invoke(score, getSpeedMs(), curLv)
+        onHudChanged?.invoke(score, levelBestScore, getSpeedMs(), curLv)
     }
 
     override fun onDraw(canvas: Canvas) {
@@ -369,7 +402,6 @@ class GameView @JvmOverloads constructor(
             canvas.drawLine(0f, y, width.toFloat(), y, paint)
         }
 
-        // Clear perimeter border / barricade around the play area
         val borderColor = levelAccentColor(curLv, lvlCfg.trailHex)
         val borderStroke = max(3f, unit * 0.14f)
         paint.reset()
@@ -393,7 +425,7 @@ class GameView @JvmOverloads constructor(
                 paint.isAntiAlias = true
                 paint.style = Paint.Style.FILL
                 paint.color = parseColorSafe(tp.colorHex, Color.MAGENTA)
-                paint.alpha = 110
+                paint.alpha = 105
                 canvas.drawCircle(tx, ty, unit * 0.14f, paint)
             }
         }
@@ -402,7 +434,7 @@ class GameView @JvmOverloads constructor(
             drawOverlay(
                 canvas,
                 title = "GAME OVER - ${GameData.BRAND}",
-                subtitle = "SCORE: $score | ${GameData.safeFull(fullIdx).name.uppercase()}",
+                subtitle = "SCORE: $score | BEST: $levelBestScore",
                 accentColor = Color.CYAN
             )
             return
@@ -412,7 +444,7 @@ class GameView @JvmOverloads constructor(
             drawOverlay(
                 canvas,
                 title = lvlCfg.name.uppercase(),
-                subtitle = "PRESS ARROW OR SWIPE TO START",
+                subtitle = "BEST: $levelBestScore | SWIPE OR ARROW TO START",
                 accentColor = Color.parseColor("#00ff88")
             )
             return
@@ -422,7 +454,7 @@ class GameView @JvmOverloads constructor(
             drawOverlay(
                 canvas,
                 title = "PAUSED - ${GameData.GAME_NAME.uppercase()}",
-                subtitle = "PRESS OK OR ARROW TO RESUME",
+                subtitle = "BEST: $levelBestScore | TAP OR OK TO RESUME",
                 accentColor = Color.CYAN
             )
             return
@@ -436,7 +468,7 @@ class GameView @JvmOverloads constructor(
         specialFood?.let { sp ->
             val sx = sp.x * cellW + cellW * 0.5f
             val sy = sp.y * cellH + cellH * 0.5f
-            drawSpecialSgsCoin(canvas, sx, sy, unit * 0.44f)
+            drawSpecialPowerCoin(canvas, sx, sy, unit * 0.44f, lvlCfg.coinName)
         }
 
         val effectiveFullIdx = ((lvlCfg.full + fullIdx) % GameData.fullBodies.size)
@@ -590,7 +622,7 @@ class GameView @JvmOverloads constructor(
         }
     }
 
-    private fun drawSpecialSgsCoin(canvas: Canvas, x: Float, y: Float, r: Float) {
+    private fun drawSpecialPowerCoin(canvas: Canvas, x: Float, y: Float, r: Float, coinName: String) {
         paint.reset()
         paint.isAntiAlias = true
         paint.style = Paint.Style.FILL
@@ -602,10 +634,11 @@ class GameView @JvmOverloads constructor(
         paint.color = Color.WHITE
         canvas.drawCircle(x, y, r * 1.15f, paint)
 
+        val shortTag = coinName.split(" ").firstOrNull()?.take(3)?.uppercase() ?: "PC"
         textPaint.color = Color.BLACK
-        textPaint.textSize = max(7f, r * 0.72f)
+        textPaint.textSize = max(7f, r * 0.68f)
         textPaint.isFakeBoldText = true
-        canvas.drawText("SGS", x, y + textPaint.textSize * 0.35f, textPaint)
+        canvas.drawText(shortTag, x, y + textPaint.textSize * 0.35f, textPaint)
     }
 
     private fun levelAccentColor(level: Int, fallbackHex: String): Int {
@@ -865,7 +898,7 @@ class GameView @JvmOverloads constructor(
         }
     }
 
-    private fun playTone(baseFreq: Int, durationMs: Int, toneType: Int) {
+    private fun playSoftTone(baseFreq: Int, durationMs: Int, fallbackToneType: Int) {
         if (!soundOn) return
         Thread {
             try {
@@ -873,24 +906,21 @@ class GameView @JvmOverloads constructor(
                 val numSamples = ((sampleRate * durationMs) / 1000.0).toInt().coerceAtLeast(220)
                 val pcm = ShortArray(numSamples)
 
-                val levelSemitoneShift = 2.0.pow((curLv - 1) / 6.0)
-                val freq = (baseFreq * levelSemitoneShift).coerceIn(150.0, 2400.0)
-                val useSquareWave = (curLv % 2 == 0)
+                val semitoneShift = 2.0.pow(((curLv - 1) % 7) / 12.0)
+                val freq = (baseFreq * semitoneShift).coerceIn(180.0, 1400.0)
 
                 for (i in 0 until numSamples) {
                     val t = i.toDouble() / sampleRate.toDouble()
+                    val attackEnd = numSamples * 0.18
+                    val releaseStart = numSamples * 0.55
                     val envelope = when {
-                        i < numSamples * 0.1 -> i.toDouble() / (numSamples * 0.1)
-                        i > numSamples * 0.75 -> ((numSamples - i).toDouble() / (numSamples * 0.25)).coerceAtLeast(0.0)
+                        i < attackEnd -> i.toDouble() / attackEnd.coerceAtLeast(1.0)
+                        i > releaseStart -> ((numSamples - i).toDouble() / (numSamples - releaseStart).coerceAtLeast(1.0)).coerceAtLeast(0.0)
                         else -> 1.0
                     }
                     val phase = 2.0 * PI * freq * t
-                    val wave = if (useSquareWave) {
-                        if (sin(phase) >= 0.0) 0.55 else -0.55
-                    } else {
-                        sin(phase) * 0.75
-                    }
-                    pcm[i] = (wave * envelope * Short.MAX_VALUE * 0.45).toInt().toShort()
+                    val wave = sin(phase) * 0.72 + sin(phase * 2.0) * 0.14
+                    pcm[i] = (wave * envelope * Short.MAX_VALUE * 0.28).toInt().toShort()
                 }
 
                 val track = AudioTrack.Builder()
@@ -913,26 +943,19 @@ class GameView @JvmOverloads constructor(
 
                 track.write(pcm, 0, pcm.size)
                 track.play()
-                Thread.sleep(durationMs.toLong() + 40L)
+                Thread.sleep(durationMs.toLong() + 30L)
                 track.stop()
                 track.release()
             } catch (_: Exception) {
                 try {
-                    val fallbackTone = when (curLv % 3) {
-                        0 -> ToneGenerator.TONE_PROP_ACK
-                        1 -> ToneGenerator.TONE_PROP_BEEP2
-                        else -> toneType
-                    }
-                    val tg = ToneGenerator(AudioManager.STREAM_MUSIC, 80)
-                    tg.startTone(fallbackTone, durationMs)
-                    handler.postDelayed({ tg.release() }, durationMs.toLong() + 50L)
+                    val tg = ToneGenerator(AudioManager.STREAM_MUSIC, 40)
+                    tg.startTone(fallbackToneType, durationMs)
+                    handler.postDelayed({ tg.release() }, durationMs.toLong() + 40L)
                 } catch (_: Exception) {
                 }
             }
         }.start()
     }
-
-    private fun Double.pow(exp: Double): Double = Math.pow(this, exp)
 
     private fun vibrate(ms: Long) {
         if (!vibOn) return
