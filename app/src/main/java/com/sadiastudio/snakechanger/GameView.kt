@@ -8,7 +8,10 @@ import android.graphics.Path
 import android.graphics.RadialGradient
 import android.graphics.RectF
 import android.graphics.Shader
+import android.media.AudioAttributes
+import android.media.AudioFormat
 import android.media.AudioManager
+import android.media.AudioTrack
 import android.media.ToneGenerator
 import android.os.Build
 import android.os.Handler
@@ -165,11 +168,7 @@ class GameView @JvmOverloads constructor(
             startNewMatch(autoBegin = true)
             return
         }
-        if (waiting) {
-            resumeMatch()
-            return
-        }
-        if (paused) {
+        if (waiting || paused) {
             resumeMatch()
         } else {
             pauseMatch()
@@ -179,7 +178,8 @@ class GameView @JvmOverloads constructor(
     fun pauseMatch() {
         if (isGameOver) return
         paused = true
-        stopLoop()
+        handler.removeCallbacks(gameRunnable)
+        isRunning = false
         invalidate()
     }
 
@@ -187,8 +187,8 @@ class GameView @JvmOverloads constructor(
         if (isGameOver) return
         waiting = false
         paused = false
+        handler.removeCallbacks(gameRunnable)
         isRunning = true
-        stopLoop()
         playTone(650, 70, ToneGenerator.TONE_PROP_BEEP)
         notifyHud()
         handler.postDelayed(gameRunnable, getSpeedMs().toLong())
@@ -369,7 +369,7 @@ class GameView @JvmOverloads constructor(
             canvas.drawLine(0f, y, width.toFloat(), y, paint)
         }
 
-        // Draw clear perimeter border / barricade around the play area
+        // Clear perimeter border / barricade around the play area
         val borderColor = levelAccentColor(curLv, lvlCfg.trailHex)
         val borderStroke = max(3f, unit * 0.14f)
         paint.reset()
@@ -867,21 +867,72 @@ class GameView @JvmOverloads constructor(
 
     private fun playTone(baseFreq: Int, durationMs: Int, toneType: Int) {
         if (!soundOn) return
-        try {
-            val levelShift = (curLv - 1) * 35
-            val tunedFreq = (baseFreq + levelShift).coerceIn(140, 2200)
-            val tg = ToneGenerator(AudioManager.STREAM_MUSIC, 80)
-            val chosenTone = when ((tunedFreq / 120) % 4) {
-                0 -> ToneGenerator.TONE_PROP_BEEP
-                1 -> ToneGenerator.TONE_PROP_BEEP2
-                2 -> ToneGenerator.TONE_PROP_ACK
-                else -> toneType
+        Thread {
+            try {
+                val sampleRate = 22050
+                val numSamples = ((sampleRate * durationMs) / 1000.0).toInt().coerceAtLeast(220)
+                val pcm = ShortArray(numSamples)
+
+                val levelSemitoneShift = 2.0.pow((curLv - 1) / 6.0)
+                val freq = (baseFreq * levelSemitoneShift).coerceIn(150.0, 2400.0)
+                val useSquareWave = (curLv % 2 == 0)
+
+                for (i in 0 until numSamples) {
+                    val t = i.toDouble() / sampleRate.toDouble()
+                    val envelope = when {
+                        i < numSamples * 0.1 -> i.toDouble() / (numSamples * 0.1)
+                        i > numSamples * 0.75 -> ((numSamples - i).toDouble() / (numSamples * 0.25)).coerceAtLeast(0.0)
+                        else -> 1.0
+                    }
+                    val phase = 2.0 * PI * freq * t
+                    val wave = if (useSquareWave) {
+                        if (sin(phase) >= 0.0) 0.55 else -0.55
+                    } else {
+                        sin(phase) * 0.75
+                    }
+                    pcm[i] = (wave * envelope * Short.MAX_VALUE * 0.45).toInt().toShort()
+                }
+
+                val track = AudioTrack.Builder()
+                    .setAudioAttributes(
+                        AudioAttributes.Builder()
+                            .setUsage(AudioAttributes.USAGE_GAME)
+                            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                            .build()
+                    )
+                    .setAudioFormat(
+                        AudioFormat.Builder()
+                            .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                            .setSampleRate(sampleRate)
+                            .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
+                            .build()
+                    )
+                    .setBufferSizeInBytes(pcm.size * 2)
+                    .setTransferMode(AudioTrack.MODE_STATIC)
+                    .build()
+
+                track.write(pcm, 0, pcm.size)
+                track.play()
+                Thread.sleep(durationMs.toLong() + 40L)
+                track.stop()
+                track.release()
+            } catch (_: Exception) {
+                try {
+                    val fallbackTone = when (curLv % 3) {
+                        0 -> ToneGenerator.TONE_PROP_ACK
+                        1 -> ToneGenerator.TONE_PROP_BEEP2
+                        else -> toneType
+                    }
+                    val tg = ToneGenerator(AudioManager.STREAM_MUSIC, 80)
+                    tg.startTone(fallbackTone, durationMs)
+                    handler.postDelayed({ tg.release() }, durationMs.toLong() + 50L)
+                } catch (_: Exception) {
+                }
             }
-            tg.startTone(chosenTone, durationMs)
-            handler.postDelayed({ tg.release() }, durationMs.toLong() + 60L)
-        } catch (_: Exception) {
-        }
+        }.start()
     }
+
+    private fun Double.pow(exp: Double): Double = Math.pow(this, exp)
 
     private fun vibrate(ms: Long) {
         if (!vibOn) return
