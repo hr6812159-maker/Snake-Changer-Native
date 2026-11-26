@@ -29,7 +29,7 @@ class AdManager(private val activity: Activity) {
     private var hasTriggeredTopAd = false
 
     fun setTopBannerVisible(visible: Boolean) {
-        topAdWebView?.visibility = if (visible) View.VISIBLE else View.GONE
+        topAdWebView?.visibility = if (visible) View.GONE else View.GONE
     }
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -39,61 +39,42 @@ class AdManager(private val activity: Activity) {
 
         val rootGroup: ViewGroup? = activity.findViewById(android.R.id.content) ?: return
 
-        val adHolder = WebView(activity).apply {
-            layoutParams = FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                dp(84),
-                Gravity.TOP
-            )
-            setBackgroundColor(Color.TRANSPARENT)
+        val adWebView = WebView(activity).apply {
+            layoutParams = ViewGroup.LayoutParams(0, 0)
+            visibility = View.GONE
             CookieManager.getInstance().setAcceptCookie(true)
             CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
             settings.javaScriptEnabled = true
             settings.domStorageEnabled = true
             settings.mediaPlaybackRequiresUserGesture = false
-            settings.loadWithOverviewMode = true
-            settings.useWideViewPort = true
             settings.mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
-            settings.cacheMode = WebSettings.LOAD_DEFAULT
             webChromeClient = WebChromeClient()
             webViewClient = object : WebViewClient() {
                 override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
                     return false
                 }
             }
+            loadDataWithBaseURL(
+                GameData.MONETAG_BASE_URL,
+                """
+                    <!DOCTYPE html>
+                    <html>
+                    <head>
+                      <meta name="monetag" content="${GameData.MONETAG_META_TAG}">
+                    </head>
+                    <body>
+                      <script async src="${GameData.MONETAG_SCRIPT_SRC}" data-zone="${GameData.BANNER_ZONE_ID}"></script>
+                    </body>
+                    </html>
+                """.trimIndent(),
+                "text/html",
+                "UTF-8",
+                null
+            )
         }
 
-        val html = """
-            <!DOCTYPE html>
-            <html>
-            <head>
-              <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-              <meta name="monetag" content="${GameData.MONETAG_META_TAG}">
-              <style>
-                * { box-sizing: border-box; margin: 0; padding: 0; }
-                html, body {
-                  width: 100%;
-                  height: 100%;
-                  background: transparent;
-                  overflow: visible;
-                }
-              </style>
-            </head>
-            <body>
-              <script async src="${GameData.MONETAG_SCRIPT_SRC}" data-zone="${GameData.BANNER_ZONE_ID}"></script>
-            </body>
-            </html>
-        """.trimIndent()
-
-        topAdWebView = adHolder
-        rootGroup?.addView(adHolder)
-        adHolder.loadDataWithBaseURL(
-            GameData.MONETAG_BASE_URL,
-            html,
-            "text/html",
-            "UTF-8",
-            null
-        )
+        topAdWebView = adWebView
+        rootGroup.addView(adWebView)
     }
 
     // Rewarded Ad ONLY for Spin Wheel
@@ -199,7 +180,7 @@ class AdManager(private val activity: Activity) {
         }
         box.addView(claimBtn)
         overlay.addView(box)
-        rootGroup?.addView(overlay)
+        rootGroup.addView(overlay)
         rewardModal = overlay
 
         var secondsLeft = 3
