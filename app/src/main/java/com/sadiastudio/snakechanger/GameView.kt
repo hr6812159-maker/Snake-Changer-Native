@@ -4,24 +4,15 @@ import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
-import android.graphics.Point
+import android.graphics.Path
 import android.graphics.RectF
-import android.media.AudioManager
-import android.media.ToneGenerator
 import android.os.Handler
 import android.os.Looper
-import android.os.VibrationEffect
-import android.os.Vibrator
-import android.os.VibratorManager
-import android.os.Build
 import android.util.AttributeSet
 import android.view.MotionEvent
 import android.view.View
-import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.cos
-import kotlin.math.max
-import kotlin.math.min
 import kotlin.math.sin
 import kotlin.random.Random
 
@@ -32,270 +23,118 @@ class GameView @JvmOverloads constructor(
 
     enum class Direction { UP, DOWN, LEFT, RIGHT }
 
-    data class HudSnapshot(
-        val coins: Int,
-        val score: Int,
-        val bestScore: Int,
-        val level: Int,
-        val speedMs: Long,
-        val paused: Boolean,
-        val gameOver: Boolean,
-        val waiting: Boolean
-    )
+    interface Listener {
+        fun onCoinsEarned(newCoins: Int, isSpecial: Boolean)
+        fun onScoreUpdated(score: Int, highScore: Int, speedMs: Long)
+        fun onGameOver(finalScore: Int, highScore: Int)
+        fun onPauseChanged(paused: Boolean, waiting: Boolean)
+        fun onWinLevel()
+    }
 
-    var onHudUpdate: ((HudSnapshot) -> Unit)? = null
-
-    private val prefs = context.getSharedPreferences("sgs_native_prefs", Context.MODE_PRIVATE)
-    private val handler = Handler(Looper.getMainLooper())
+    var listener: Listener? = null
 
     private val cols = 20
     private val rows = 10
 
-    private val snake = ArrayList<Point>()
-    private val trail = ArrayList<Pair<Point, Int>>()
+    private var snake = mutableListOf(Pair(8, 5), Pair(7, 5), Pair(6, 5), Pair(5, 5))
     private var dir = Direction.RIGHT
     private var nextDir = Direction.RIGHT
-    private var food = Point(14, 4)
-    private var specialFood: Point? = null
+    private var food = Pair(14, 4)
+    private var specialFood: Pair<Int, Int>? = null
     private var normalFoodCount = 0
 
-    private var score = 0
-    private var coins = GameData.START_COINS
-    private var currentLevel = 1
-
-    private var paused = true
-    private var waiting = true
-    private var isGameOver = false
-
-    private var soundOn = true
-    private var vibOn = true
+    private var trail = mutableListOf<Triple<Int, Int, Int>>()
     private var trailOn = true
+
+    private var score = 0
+    private var highScore = 0
+    private var coins = GameData.START_COINS
+    private var curLv = 1
+
+    private var selFood = 0
+    private var selBody = 0
+    private var selFull = 0
+    private var selHead = 0
+
+    var waiting = true
+        private set
+    var paused = true
+        private set
+    var isGameOver = false
+        private set
 
     private var touchStartX = 0f
     private var touchStartY = 0f
 
-    private var toneGen: ToneGenerator? = null
-
-    private val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG)
-    private val shapePaint = Paint(Paint.ANTI_ALIAS_FLAG)
-    private val strokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.STROKE
-        strokeWidth = 3f
-    }
-    private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        textAlign = Paint.Align.CENTER
-        isFakeBoldText = true
-    }
-
-    private val tickRunnable = object : Runnable {
+    private val handler = Handler(Looper.getMainLooper())
+    private val loopRunnable = object : Runnable {
         override fun run() {
             if (!paused && !waiting && !isGameOver) {
                 stepGame()
-                handler.postDelayed(this, getSpeedMs())
-            }
-        }
-    }
-
-    init {
-        loadSavedState()
-        initTone()
-        resetBoardForLevel(currentLevel, keepWaiting = true)
-    }
-
-    private fun initTone() {
-        try {
-            toneGen = ToneGenerator(AudioManager.STREAM_MUSIC, 35)
-        } catch (_: Exception) {
-            toneGen = null
-        }
-    }
-
-    private fun playSoftTone(durationMs: Int = 65) {
-        if (!soundOn) return
-        try {
-            toneGen?.startTone(ToneGenerator.TONE_PROP_BEEP, durationMs.coerceIn(30, 140))
-        } catch (_: Exception) {
-        }
-    }
-
-    private fun vibrateSoft(ms: Long = 25L) {
-        if (!vibOn) return
-        try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                val vm = context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager
-                vm?.defaultVibrator?.vibrate(VibrationEffect.createOneShot(ms, VibrationEffect.DEFAULT_AMPLITUDE))
-            } else {
-                @Suppress("DEPRECATION")
-                val vib = context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    vib?.vibrate(VibrationEffect.createOneShot(ms, VibrationEffect.DEFAULT_AMPLITUDE))
-                } else {
-                    @Suppress("DEPRECATION")
-                    vib?.vibrate(ms)
+                invalidate()
+                if (!paused && !waiting && !isGameOver) {
+                    handler.postDelayed(this, getSpeedMs())
                 }
             }
-        } catch (_: Exception) {
         }
     }
 
-    private fun loadSavedState() {
-        soundOn = prefs.getBoolean("pref_sound", true)
-        vibOn = prefs.getBoolean("pref_vib", true)
-        trailOn = prefs.getBoolean("pref_trail", true)
-
-        val savedLv = prefs.getInt("cur_lv", 1)
-        currentLevel = savedLv.coerceIn(1, 15)
-
-        val encodedCoins = prefs.getString("sgs_secure_coins", null)
-        coins = if (encodedCoins == null) {
-            val startVal = GameData.START_COINS
-            prefs.edit().putString("sgs_secure_coins", GameData.encodeCoins(startVal)).apply()
-            startVal
-        } else {
-            GameData.decodeCoins(encodedCoins)
-        }
+    private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.parseColor("#FF2A55")
+        strokeWidth = 4.5f
+        style = Paint.Style.STROKE
     }
 
-    fun getCoins(): Int = coins
-
-    fun setCoins(newCoins: Int) {
-        coins = max(0, newCoins)
-        prefs.edit().putString("sgs_secure_coins", GameData.encodeCoins(coins)).apply()
-        notifyHud()
+    fun configure(
+        level: Int,
+        coins: Int,
+        highScore: Int,
+        trailOn: Boolean,
+        foodIdx: Int,
+        bodyIdx: Int,
+        fullIdx: Int,
+        headIdx: Int
+    ) {
+        this.curLv = level.coerceIn(1, 15)
+        this.coins = coins.coerceAtLeast(0)
+        this.highScore = highScore.coerceAtLeast(0)
+        this.trailOn = trailOn
+        this.selFood = foodIdx.coerceIn(0, GameData.foodItems.lastIndex)
+        this.selBody = bodyIdx.coerceIn(0, GameData.bodyItems.lastIndex)
+        this.selFull = fullIdx.coerceIn(0, GameData.fullBodies.lastIndex)
+        this.selHead = headIdx.coerceIn(0, GameData.heads.lastIndex)
+        resetForLevel(keepWaiting = true)
     }
 
-    fun addCoins(delta: Int) {
-        setCoins(coins + delta)
-    }
-
-    fun getCurrentLevel(): Int = currentLevel
-
-    fun getLevelBestScore(lv: Int = currentLevel): Int {
-        val safeLv = lv.coerceIn(1, 15)
-        return max(0, prefs.getInt("sgs_best_lv_$safeLv", 0))
-    }
-
-    private fun updateLevelBestScore(lv: Int, newScore: Int): Int {
-        val safeLv = lv.coerceIn(1, 15)
-        val best = max(getLevelBestScore(safeLv), max(0, newScore))
-        prefs.edit().putInt("sgs_best_lv_$safeLv", best).apply()
-        return best
-    }
-
-    fun resetCurrentLevelBestScore() {
-        val safeLv = currentLevel.coerceIn(1, 15)
-        prefs.edit().putInt("sgs_best_lv_$safeLv", 0).apply()
-        notifyHud()
-        invalidate()
-    }
-
-    fun selectLevel(lv: Int) {
-        val safeLv = lv.coerceIn(1, 15)
-        currentLevel = safeLv
-        prefs.edit().putInt("cur_lv", currentLevel).apply()
-        resetBoardForLevel(currentLevel, keepWaiting = true)
-    }
-
-    fun setSoundEnabled(enabled: Boolean) {
-        soundOn = enabled
-        prefs.edit().putBoolean("pref_sound", soundOn).apply()
-        if (soundOn) playSoftTone(60)
-    }
-
-    fun isSoundEnabled(): Boolean = soundOn
-
-    fun setVibrationEnabled(enabled: Boolean) {
-        vibOn = enabled
-        prefs.edit().putBoolean("pref_vib", vibOn).apply()
-        if (vibOn) vibrateSoft(20L)
-    }
-
-    fun isVibrationEnabled(): Boolean = vibOn
-
-    fun setTrailEnabled(enabled: Boolean) {
-        trailOn = enabled
-        prefs.edit().putBoolean("pref_trail", trailOn).apply()
+    fun applyTheme(level: Int, trailOn: Boolean, foodIdx: Int, bodyIdx: Int, fullIdx: Int, headIdx: Int) {
+        this.curLv = level.coerceIn(1, 15)
+        this.trailOn = trailOn
         if (!trailOn) trail.clear()
+        this.selFood = foodIdx.coerceIn(0, GameData.foodItems.lastIndex)
+        this.selBody = bodyIdx.coerceIn(0, GameData.bodyItems.lastIndex)
+        this.selFull = fullIdx.coerceIn(0, GameData.fullBodies.lastIndex)
+        this.selHead = headIdx.coerceIn(0, GameData.heads.lastIndex)
+        listener?.onScoreUpdated(score, highScore, getSpeedMs())
         invalidate()
     }
 
-    fun isTrailEnabled(): Boolean = trailOn
+    fun setCoinsValue(newCoins: Int) {
+        coins = newCoins.coerceAtLeast(0)
+    }
 
     fun getSpeedMs(): Long {
-        val cfg = GameData.safeLevel(currentLevel)
-        val base = 200
-        val levelReduce = currentLevel * 4
-        val scoreReduce = score / 3
-        val speed = max(80, base - levelReduce - cfg.speedBonus - scoreReduce)
-        return speed.toLong()
+        val cfg = GameData.safeLevel(curLv)
+        val base = 200L
+        val levelReduce = curLv * 4L
+        val bonus = cfg.speedBonus.toLong()
+        val scoreReduce = (score / 3).toLong()
+        return (base - levelReduce - bonus - scoreReduce).coerceAtLeast(80L)
     }
 
-    fun startNewMatch() {
-        resetBoardForLevel(currentLevel, keepWaiting = false)
-        paused = false
-        waiting = false
-        isGameOver = false
-        playSoftTone(75)
-        scheduleTick()
-        notifyHud()
-        invalidate()
-    }
-
-    fun togglePause() {
-        if (isGameOver) {
-            startNewMatch()
-            return
-        }
-        if (waiting) {
-            waiting = false
-            paused = false
-            playSoftTone(70)
-            scheduleTick()
-            notifyHud()
-            invalidate()
-            return
-        }
-        paused = !paused
-        if (paused) {
-            handler.removeCallbacks(tickRunnable)
-        } else {
-            scheduleTick()
-        }
-        notifyHud()
-        invalidate()
-    }
-
-    fun pauseForOverlay() {
-        if (!paused) {
-            paused = true
-            handler.removeCallbacks(tickRunnable)
-            notifyHud()
-            invalidate()
-        }
-    }
-
-    fun setDirection(d: Direction) {
-        val validTurn = when (d) {
-            Direction.UP -> dir != Direction.DOWN
-            Direction.DOWN -> dir != Direction.UP
-            Direction.LEFT -> dir != Direction.RIGHT
-            Direction.RIGHT -> dir != Direction.LEFT
-        }
-        if (!validTurn) return
-        nextDir = d
-        if (isGameOver || waiting || paused) {
-            startNewMatch()
-        }
-    }
-
-    private fun resetBoardForLevel(lv: Int, keepWaiting: Boolean) {
-        handler.removeCallbacks(tickRunnable)
-        currentLevel = lv.coerceIn(1, 15)
-        snake.clear()
-        snake.add(Point(8, 5))
-        snake.add(Point(7, 5))
-        snake.add(Point(6, 5))
-        snake.add(Point(5, 5))
+    fun resetForLevel(keepWaiting: Boolean = true) {
+        handler.removeCallbacks(loopRunnable)
+        snake = mutableListOf(Pair(8, 5), Pair(7, 5), Pair(6, 5), Pair(5, 5))
         trail.clear()
         dir = Direction.RIGHT
         nextDir = Direction.RIGHT
@@ -304,42 +143,95 @@ class GameView @JvmOverloads constructor(
         specialFood = null
         isGameOver = false
         waiting = keepWaiting
-        paused = keepWaiting
+        paused = true
         placeNormalFood()
-        notifyHud()
+        listener?.onScoreUpdated(score, highScore, getSpeedMs())
+        listener?.onPauseChanged(paused, waiting)
         invalidate()
     }
 
-    private fun scheduleTick() {
-        handler.removeCallbacks(tickRunnable)
-        handler.postDelayed(tickRunnable, getSpeedMs())
+    fun pauseForMenu() {
+        if (!waiting && !isGameOver) {
+            paused = true
+            handler.removeCallbacks(loopRunnable)
+            listener?.onPauseChanged(paused, waiting)
+            invalidate()
+        }
+    }
+
+    fun resumeGame() {
+        if (isGameOver) return
+        paused = false
+        waiting = false
+        handler.removeCallbacks(loopRunnable)
+        handler.postDelayed(loopRunnable, getSpeedMs())
+        listener?.onPauseChanged(paused, waiting)
+        invalidate()
+    }
+
+    fun togglePauseOrStart() {
+        if (isGameOver) {
+            isGameOver = false
+            resetForLevel(keepWaiting = false)
+            return
+        }
+        if (waiting) {
+            resumeGame()
+            return
+        }
+        if (paused) {
+            resumeGame()
+        } else {
+            paused = true
+            handler.removeCallbacks(loopRunnable)
+            listener?.onPauseChanged(paused, waiting)
+            invalidate()
+        }
+    }
+
+    fun setDirection(newDir: Direction) {
+        val valid = (newDir == Direction.UP && dir != Direction.DOWN) ||
+            (newDir == Direction.DOWN && dir != Direction.UP) ||
+            (newDir == Direction.LEFT && dir != Direction.RIGHT) ||
+            (newDir == Direction.RIGHT && dir != Direction.LEFT)
+        if (!valid) return
+        nextDir = newDir
+        if (waiting || paused || isGameOver) {
+            if (isGameOver) {
+                isGameOver = false
+                resetForLevel(keepWaiting = false)
+            } else {
+                resumeGame()
+            }
+        }
     }
 
     private fun placeNormalFood() {
         var attempts = 0
-        while (attempts < 150) {
-            val fx = Random.nextInt(1, cols - 1)
-            val fy = Random.nextInt(1, rows - 1)
-            val onSnake = snake.any { it.x == fx && it.y == fy }
-            val onSpecial = specialFood?.let { it.x == fx && it.y == fy } == true
-            if (!onSnake && !onSpecial) {
-                food = Point(fx, fy)
+        while (attempts < 100) {
+            val fx = Random.nextInt(1, 19)
+            val fy = Random.nextInt(1, 9)
+            val cand = Pair(fx, fy)
+            if (cand !in snake && cand != specialFood) {
+                food = cand
                 return
             }
             attempts++
         }
-        food = Point(cols / 2, rows / 2)
+        isGameOver = true
+        paused = true
+        handler.removeCallbacks(loopRunnable)
+        listener?.onWinLevel()
     }
 
-    private fun placeSpecialFood() {
+    private fun placeSpecialFoodSafe() {
         var attempts = 0
-        while (attempts < 150) {
-            val sx = Random.nextInt(1, cols - 1)
-            val sy = Random.nextInt(1, rows - 1)
-            val onSnake = snake.any { it.x == sx && it.y == sy }
-            val onFood = food.x == sx && food.y == sy
-            if (!onSnake && !onFood) {
-                specialFood = Point(sx, sy)
+        while (attempts < 100) {
+            val sx = Random.nextInt(1, 19)
+            val sy = Random.nextInt(1, 9)
+            val cand = Pair(sx, sy)
+            if (cand !in snake && cand != food && cand != specialFood) {
+                specialFood = cand
                 return
             }
             attempts++
@@ -348,83 +240,307 @@ class GameView @JvmOverloads constructor(
 
     private fun stepGame() {
         dir = nextDir
-        val head = Point(snake.first().x, snake.first().y)
-        when (dir) {
-            Direction.UP -> head.y -= 1
-            Direction.DOWN -> head.y += 1
-            Direction.LEFT -> head.x -= 1
-            Direction.RIGHT -> head.x += 1
+        val head = snake.first()
+        val nextHead = when (dir) {
+            Direction.UP -> Pair(head.first, head.second - 1)
+            Direction.DOWN -> Pair(head.first, head.second + 1)
+            Direction.LEFT -> Pair(head.first - 1, head.second)
+            Direction.RIGHT -> Pair(head.first + 1, head.second)
         }
 
-        val cfg = GameData.safeLevel(currentLevel)
+        val cfg = GameData.safeLevel(curLv)
+        val trailColor = Color.parseColor(cfg.trailHex)
         if (trailOn) {
-            trail.add(0, Pair(Point(head.x, head.y), Color.parseColor(cfg.trailHex)))
-            if (trail.size > 8) {
-                trail.removeAt(trail.lastIndex)
-            }
+            trail.add(0, Triple(nextHead.first, nextHead.second, trailColor))
+            if (trail.size > 8) trail.removeAt(trail.lastIndex)
         } else {
             trail.clear()
         }
 
-        val hitWall = head.x < 0 || head.x >= cols || head.y < 0 || head.y >= rows
-        val hitSelf = snake.any { it.x == head.x && it.y == head.y }
+        val hitWall = nextHead.first !in 0 until cols || nextHead.second !in 0 until rows
+        val hitSelf = nextHead in snake
         if (hitWall || hitSelf) {
-            handler.removeCallbacks(tickRunnable)
-            isGameOver = true
+            handler.removeCallbacks(loopRunnable)
             paused = true
             waiting = true
-            updateLevelBestScore(currentLevel, score)
-            playSoftTone(110)
-            vibrateSoft(45L)
-            notifyHud()
-            invalidate()
+            isGameOver = true
+            if (score > highScore) {
+                highScore = score
+            }
+            listener?.onScoreUpdated(score, highScore, getSpeedMs())
+            listener?.onGameOver(score, highScore)
+            listener?.onPauseChanged(paused, waiting)
             return
         }
 
-        snake.add(0, head)
+        snake.add(0, nextHead)
 
-        val sp = specialFood
-        if (sp != null && head.x == sp.x && head.y == sp.y) {
+        if (specialFood != null && nextHead == specialFood) {
             score += 1
-            updateLevelBestScore(currentLevel, score)
-            addCoins(GameData.SPECIAL_COIN_REWARD)
+            coins += GameData.SPECIAL_FOOD_EARN
             specialFood = null
-            playSoftTone(90)
-            vibrateSoft(30L)
+            normalFoodCount = 0
             placeNormalFood()
-        } else if (head.x == food.x && head.y == food.y) {
+            listener?.onCoinsEarned(coins, true)
+        } else if (nextHead == food) {
             score += 1
-            updateLevelBestScore(currentLevel, score)
+            coins += GameData.FOOD_EARN
             normalFoodCount += 1
-            if (normalFoodCount % GameData.FOODS_PER_POWER_COIN == 0) {
-                addCoins(GameData.POWER_COINS_PER_10_FOOD)
-                playSoftTone(85)
-                placeSpecialFood()
-            } else {
-                playSoftTone(55)
+            if (normalFoodCount % 10 == 0) {
+                placeSpecialFoodSafe()
             }
             placeNormalFood()
+            listener?.onCoinsEarned(coins, false)
         } else {
             snake.removeAt(snake.lastIndex)
         }
 
-        notifyHud()
-        invalidate()
+        if (score > highScore) {
+            highScore = score
+        }
+        listener?.onScoreUpdated(score, highScore, getSpeedMs())
     }
 
-    private fun notifyHud() {
-        onHudUpdate?.invoke(
-            HudSnapshot(
-                coins = coins,
-                score = score,
-                bestScore = getLevelBestScore(currentLevel),
-                level = currentLevel,
-                speedMs = getSpeedMs(),
-                paused = paused,
-                gameOver = isGameOver,
-                waiting = waiting
+    override fun onDraw(canvas: Canvas) {
+        super.onDraw(canvas)
+        val w = width.toFloat()
+        val h = height.toFloat()
+        if (w <= 0f || h <= 0f) return
+
+        val cfg = GameData.safeLevel(curLv)
+        paint.reset()
+        paint.isAntiAlias = true
+        paint.style = Paint.Style.FILL
+        paint.color = Color.parseColor(cfg.bgHex)
+        canvas.drawRect(0f, 0f, w, h, paint)
+
+        val cellW = w / cols
+        val cellH = h / rows
+        val cellMin = minOf(cellW, cellH)
+
+        if (trailOn && trail.isNotEmpty()) {
+            trail.forEach { t ->
+                val tx = t.first * cellW + cellW / 2f
+                val ty = t.second * cellH + cellH / 2f
+                paint.style = Paint.Style.FILL
+                paint.color = t.third
+                canvas.drawCircle(tx, ty, cellMin * 0.14f, paint)
+            }
+        }
+
+        if (waiting && !isGameOver) {
+            paint.style = Paint.Style.FILL
+            paint.color = Color.parseColor("#B8000000")
+            canvas.drawRect(0f, 0f, w, h, paint)
+
+            paint.color = Color.parseColor("#00FFFF")
+            paint.textSize = (h * 0.085f).coerceIn(10f, 16f)
+            paint.textAlign = Paint.Align.CENTER
+            paint.isFakeBoldText = true
+            canvas.drawText(cfg.name.uppercase(), w / 2f, h * 0.30f, paint)
+
+            paint.color = Color.parseColor("#00FF88")
+            paint.textSize = (h * 0.07f).coerceIn(9f, 14f)
+            canvas.drawText("PRESS ARROW OR SWIPE TO START", w / 2f, h * 0.50f, paint)
+            canvas.drawRect(1.5f, 1.5f, w - 1.5f, h - 1.5f, borderPaint)
+            return
+        }
+
+        if (paused && !waiting && !isGameOver) {
+            paint.style = Paint.Style.FILL
+            paint.color = Color.parseColor("#80000000")
+            canvas.drawRect(0f, 0f, w, h, paint)
+
+            paint.color = Color.parseColor("#00FFFF")
+            paint.textSize = (h * 0.11f).coerceIn(13f, 20f)
+            paint.textAlign = Paint.Align.CENTER
+            paint.isFakeBoldText = true
+            canvas.drawText("PAUSED - SNAKE CHANGER", w / 2f, h * 0.53f, paint)
+            canvas.drawRect(1.5f, 1.5f, w - 1.5f, h - 1.5f, borderPaint)
+            return
+        }
+
+        if (isGameOver) {
+            val fullCfg = GameData.fullBodies[selFull]
+            paint.style = Paint.Style.FILL
+            paint.color = Color.parseColor("#D9000000")
+            canvas.drawRect(0f, 0f, w, h, paint)
+
+            paint.color = Color.parseColor("#00FFFF")
+            paint.textSize = (h * 0.105f).coerceIn(12f, 19f)
+            paint.textAlign = Paint.Align.CENTER
+            paint.isFakeBoldText = true
+            canvas.drawText("GAME OVER - SNAKE CHANGER - SGS", w / 2f, h * 0.42f, paint)
+
+            paint.color = Color.parseColor("#FFEB3B")
+            paint.textSize = (h * 0.068f).coerceIn(8.5f, 13f)
+            canvas.drawText(
+                "PRESS ARROW - ${fullCfg.name.uppercase()} - ${GameData.STUDIO}",
+                w / 2f,
+                h * 0.58f,
+                paint
             )
-        )
+            canvas.drawRect(1.5f, 1.5f, w - 1.5f, h - 1.5f, borderPaint)
+            return
+        }
+
+        val foodItem = GameData.foodItems[selFood]
+        drawFoodShape(canvas, food.first * cellW + cellW / 2f, food.second * cellH + cellH / 2f, cellMin, foodItem)
+
+        specialFood?.let { sp ->
+            drawSpecialCoin(canvas, sp.first * cellW + cellW / 2f, sp.second * cellH + cellH / 2f, cellMin)
+        }
+
+        val fullCfg = GameData.fullBodies[selFull]
+        val headCfg = GameData.heads[selHead]
+        val bodyCfg = GameData.bodyItems[selBody]
+
+        snake.forEachIndexed { idx, seg ->
+            val sx = seg.first * cellW + cellW / 2f
+            val sy = seg.second * cellH + cellH / 2f
+            if (idx == 0) {
+                paint.reset()
+                paint.isAntiAlias = true
+                paint.style = Paint.Style.FILL
+                paint.color = Color.parseColor(headCfg.colorHex)
+                canvas.drawCircle(sx, sy, cellMin * 0.40f, paint)
+
+                paint.color = Color.BLACK
+                paint.textSize = (cellMin * 0.42f).coerceIn(8f, 14f)
+                paint.textAlign = Paint.Align.CENTER
+                paint.isFakeBoldText = true
+                canvas.drawText(headCfg.symbol, sx, sy + (paint.textSize * 0.35f), paint)
+            } else if (idx % 2 == 0) {
+                drawCompactSegment(canvas, sx, sy, cellMin, fullCfg)
+            } else {
+                drawBodySegment(canvas, sx, sy, cellMin, bodyCfg, idx)
+            }
+        }
+
+        canvas.drawRect(1.5f, 1.5f, w - 1.5f, h - 1.5f, borderPaint)
+    }
+
+    private fun drawFoodShape(canvas: Canvas, x: Float, y: Float, unit: Float, item: GameData.FoodItem) {
+        val r = unit * 0.36f
+        val col = Color.parseColor(item.colorHex)
+        paint.reset()
+        paint.isAntiAlias = true
+        paint.color = col
+
+        when (item.shape) {
+            "apple" -> {
+                paint.style = Paint.Style.FILL
+                canvas.drawCircle(x, y, r, paint)
+                paint.color = Color.parseColor("#00FF00")
+                canvas.drawRect(x - r * 0.15f, y - r * 1.3f, x + r * 0.15f, y - r * 0.7f, paint)
+            }
+            "star", "crown" -> {
+                paint.style = Paint.Style.FILL
+                val path = Path()
+                for (i in 0 until 5) {
+                    val ang = i * Math.PI * 2.0 / 5.0 - Math.PI / 2.0
+                    val px = x + (cos(ang) * r).toFloat()
+                    val py = y + (sin(ang) * r).toFloat()
+                    if (i == 0) path.moveTo(px, py) else path.lineTo(px, py)
+                }
+                path.close()
+                canvas.drawPath(path, paint)
+            }
+            "diamond" -> {
+                paint.style = Paint.Style.FILL
+                val path = Path().apply {
+                    moveTo(x, y - r * 1.2f)
+                    lineTo(x + r * 1.1f, y)
+                    lineTo(x, y + r * 1.2f)
+                    lineTo(x - r * 1.1f, y)
+                    close()
+                }
+                canvas.drawPath(path, paint)
+            }
+            "triangle" -> {
+                paint.style = Paint.Style.FILL
+                val path = Path().apply {
+                    moveTo(x, y - r * 1.1f)
+                    lineTo(x + r * 1.1f, y + r)
+                    lineTo(x - r * 1.1f, y + r)
+                    close()
+                }
+                canvas.drawPath(path, paint)
+            }
+            "square", "cross" -> {
+                paint.style = Paint.Style.FILL
+                canvas.drawRect(RectF(x - r, y - r, x + r, y + r), paint)
+            }
+            "hexagon" -> {
+                paint.style = Paint.Style.FILL
+                val path = Path()
+                for (i in 0 until 6) {
+                    val ang = i * Math.PI / 3.0
+                    val px = x + (cos(ang) * r).toFloat()
+                    val py = y + (sin(ang) * r).toFloat()
+                    if (i == 0) path.moveTo(px, py) else path.lineTo(px, py)
+                }
+                path.close()
+                canvas.drawPath(path, paint)
+            }
+            "rainbow" -> {
+                paint.style = Paint.Style.STROKE
+                paint.strokeWidth = 3f
+                paint.color = Color.parseColor("#FF00FF")
+                canvas.drawArc(RectF(x - r, y - r, x + r, y + r), 180f, 180f, false, paint)
+            }
+            else -> {
+                paint.style = Paint.Style.FILL
+                canvas.drawCircle(x, y, r, paint)
+            }
+        }
+    }
+
+    private fun drawSpecialCoin(canvas: Canvas, x: Float, y: Float, unit: Float) {
+        val r = unit * 0.42f
+        paint.reset()
+        paint.isAntiAlias = true
+        paint.style = Paint.Style.FILL
+        paint.color = Color.parseColor("#FFCC00")
+        canvas.drawCircle(x, y, r, paint)
+
+        paint.style = Paint.Style.STROKE
+        paint.strokeWidth = 2f
+        paint.color = Color.WHITE
+        canvas.drawCircle(x, y, r * 1.15f, paint)
+
+        paint.style = Paint.Style.FILL
+        paint.color = Color.BLACK
+        paint.textSize = (unit * 0.34f).coerceIn(7f, 12f)
+        paint.textAlign = Paint.Align.CENTER
+        paint.isFakeBoldText = true
+        canvas.drawText("SGS", x, y + (paint.textSize * 0.35f), paint)
+    }
+
+    private fun drawBodySegment(canvas: Canvas, x: Float, y: Float, unit: Float, item: GameData.BodyItem, idx: Int) {
+        val r = unit * 0.28f
+        val col = Color.parseColor(item.colorHex)
+        paint.reset()
+        paint.isAntiAlias = true
+        paint.style = Paint.Style.FILL
+        paint.color = if (item.pattern == "rainbow") {
+            if (idx % 2 == 0) Color.parseColor("#FF00FF") else Color.parseColor("#00FFFF")
+        } else {
+            col
+        }
+        canvas.drawCircle(x, y, r, paint)
+    }
+
+    private fun drawCompactSegment(canvas: Canvas, x: Float, y: Float, unit: Float, fb: GameData.FullBodyItem) {
+        val r = (unit * 0.18f) + (fb.size * 0.45f)
+        paint.reset()
+        paint.isAntiAlias = true
+        paint.style = Paint.Style.FILL
+        paint.color = Color.parseColor(fb.dotHex)
+        canvas.drawCircle(x, y, r, paint)
+
+        paint.color = Color.parseColor(fb.centerHex)
+        canvas.drawCircle(x, y, r * 0.45f, paint)
     }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
@@ -443,8 +559,8 @@ class GameView @JvmOverloads constructor(
                     } else {
                         setDirection(if (dy > 0) Direction.DOWN else Direction.UP)
                     }
-                } else if (waiting || paused || isGameOver) {
-                    startNewMatch()
+                } else {
+                    togglePauseOrStart()
                 }
                 return true
             }
@@ -452,151 +568,8 @@ class GameView @JvmOverloads constructor(
         return super.onTouchEvent(event)
     }
 
-    override fun onDraw(canvas: Canvas) {
-        super.onDraw(canvas)
-        val w = width.toFloat()
-        val h = height.toFloat()
-        if (w <= 0f || h <= 0f) return
-
-        val cfg = GameData.safeLevel(currentLevel)
-        bgPaint.color = Color.parseColor(cfg.bgHex)
-        canvas.drawRect(0f, 0f, w, h, bgPaint)
-
-        val cellW = w / cols.toFloat()
-        val cellH = h / rows.toFloat()
-        val unit = min(cellW, cellH)
-
-        if (trailOn) {
-            for (item in trail) {
-                val cx = (item.first.x + 0.5f) * cellW
-                val cy = (item.first.y + 0.5f) * cellH
-                shapePaint.color = item.second
-                canvas.drawCircle(cx, cy, unit * 0.14f, shapePaint)
-            }
-        }
-
-        val foodCfg = GameData.foodItems.getOrElse(cfg.food) { GameData.foodItems.first() }
-        val fx = (food.x + 0.5f) * cellW
-        val fy = (food.y + 0.5f) * cellH
-        drawFood(canvas, fx, fy, unit * 0.34f, foodCfg)
-
-        specialFood?.let { sp ->
-            val sx = (sp.x + 0.5f) * cellW
-            val sy = (sp.y + 0.5f) * cellH
-            drawPowerCoin(canvas, sx, sy, unit * 0.40f)
-        }
-
-        val headCfg = GameData.heads.getOrElse(cfg.head) { GameData.heads.first() }
-        val bodyCfg = GameData.bodyItems.getOrElse(cfg.body) { GameData.bodyItems.first() }
-        val fullCfg = GameData.fullBodies.getOrElse(cfg.full) { GameData.fullBodies.first() }
-
-        snake.forEachIndexed { idx, seg ->
-            val cx = (seg.x + 0.5f) * cellW
-            val cy = (seg.y + 0.5f) * cellH
-            if (idx == 0) {
-                shapePaint.color = Color.parseColor(headCfg.colorHex)
-                canvas.drawCircle(cx, cy, unit * 0.42f, shapePaint)
-                textPaint.color = Color.BLACK
-                textPaint.textSize = unit * 0.36f
-                canvas.drawText(headCfg.emoji, cx, cy + unit * 0.12f, textPaint)
-            } else if (idx % 2 == 0) {
-                shapePaint.color = Color.parseColor(fullCfg.colorHex)
-                canvas.drawCircle(cx, cy, unit * 0.34f, shapePaint)
-                shapePaint.color = Color.parseColor(fullCfg.centerHex)
-                canvas.drawCircle(cx, cy, unit * 0.14f, shapePaint)
-            } else {
-                shapePaint.color = Color.parseColor(bodyCfg.colorHex)
-                canvas.drawCircle(cx, cy, unit * 0.32f, shapePaint)
-            }
-        }
-
-        if (isGameOver) {
-            bgPaint.color = Color.argb(205, 0, 0, 0)
-            canvas.drawRect(0f, 0f, w, h, bgPaint)
-            textPaint.color = Color.CYAN
-            textPaint.textSize = unit * 0.72f
-            canvas.drawText("GAME OVER - LV$currentLevel", w / 2f, h * 0.42f, textPaint)
-            textPaint.color = Color.YELLOW
-            textPaint.textSize = unit * 0.46f
-            canvas.drawText("BEST: ${getLevelBestScore(currentLevel)} | TAP OR ARROW", w / 2f, h * 0.62f, textPaint)
-        } else if (waiting) {
-            bgPaint.color = Color.argb(165, 0, 0, 0)
-            canvas.drawRect(0f, 0f, w, h, bgPaint)
-            textPaint.color = Color.CYAN
-            textPaint.textSize = unit * 0.52f
-            canvas.drawText(cfg.name.uppercase(), w / 2f, h * 0.38f, textPaint)
-            textPaint.color = Color.GREEN
-            textPaint.textSize = unit * 0.42f
-            canvas.drawText("SWIPE OR ARROW TO START", w / 2f, h * 0.58f, textPaint)
-        } else if (paused) {
-            bgPaint.color = Color.argb(145, 0, 0, 0)
-            canvas.drawRect(0f, 0f, w, h, bgPaint)
-            textPaint.color = Color.CYAN
-            textPaint.textSize = unit * 0.72f
-            canvas.drawText("PAUSED", w / 2f, h * 0.52f, textPaint)
-        }
-    }
-
-    private fun drawFood(canvas: Canvas, cx: Float, cy: Float, r: Float, item: GameData.FoodItem) {
-        shapePaint.color = Color.parseColor(item.colorHex)
-        strokePaint.color = Color.parseColor(item.colorHex)
-        when (item.shape) {
-            "square" -> canvas.drawRect(RectF(cx - r, cy - r, cx + r, cy + r), shapePaint)
-            "diamond" -> {
-                val path = android.graphics.Path().apply {
-                    moveTo(cx, cy - r * 1.2f)
-                    lineTo(cx + r * 1.1f, cy)
-                    lineTo(cx, cy + r * 1.2f)
-                    lineTo(cx - r * 1.1f, cy)
-                    close()
-                }
-                canvas.drawPath(path, shapePaint)
-            }
-            "triangle" -> {
-                val path = android.graphics.Path().apply {
-                    moveTo(cx, cy - r * 1.1f)
-                    lineTo(cx + r * 1.1f, cy + r)
-                    lineTo(cx - r * 1.1f, cy + r)
-                    close()
-                }
-                canvas.drawPath(path, shapePaint)
-            }
-            "star" -> {
-                val path = android.graphics.Path()
-                for (i in 0 until 10) {
-                    val rad = if (i % 2 == 0) r * 1.2f else r * 0.55f
-                    val ang = i * PI / 5.0 - PI / 2.0
-                    val px = cx + (cos(ang) * rad).toFloat()
-                    val py = cy + (sin(ang) * rad).toFloat()
-                    if (i == 0) path.moveTo(px, py) else path.lineTo(px, py)
-                }
-                path.close()
-                canvas.drawPath(path, shapePaint)
-            }
-            else -> {
-                canvas.drawCircle(cx, cy, r, shapePaint)
-                canvas.drawCircle(cx, cy, r * 0.45f, strokePaint)
-            }
-        }
-    }
-
-    private fun drawPowerCoin(canvas: Canvas, cx: Float, cy: Float, r: Float) {
-        shapePaint.color = Color.parseColor("#ffcc00")
-        canvas.drawCircle(cx, cy, r, shapePaint)
-        strokePaint.color = Color.WHITE
-        canvas.drawCircle(cx, cy, r * 1.15f, strokePaint)
-        textPaint.color = Color.BLACK
-        textPaint.textSize = max(9f, r * 0.72f)
-        canvas.drawText("PC", cx, cy + textPaint.textSize * 0.35f, textPaint)
-    }
-
     override fun onDetachedFromWindow() {
         super.onDetachedFromWindow()
-        handler.removeCallbacks(tickRunnable)
-        try {
-            toneGen?.release()
-        } catch (_: Exception) {
-        }
-        toneGen = null
+        handler.removeCallbacks(loopRunnable)
     }
 }
