@@ -1,11 +1,12 @@
 package com.sadiastudio.snakechanger
 
+import android.animation.ValueAnimator
+import android.content.Context
 import android.content.Intent
-import android.content.SharedPreferences
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
-import android.graphics.drawable.ColorDrawable
+import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.os.Bundle
@@ -14,1149 +15,1457 @@ import android.os.Looper
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
+import android.view.animation.DecelerateInterpolator
 import android.widget.Button
 import android.widget.FrameLayout
-import android.widget.ImageView
+import android.widget.HorizontalScrollView
 import android.widget.LinearLayout
-import android.widget.ProgressBar
 import android.widget.ScrollView
 import android.widget.TextView
-import android.widget.Toast
-import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.view.GravityCompat
+import androidx.drawerlayout.widget.DrawerLayout
 import kotlin.random.Random
 
 class MainActivity : AppCompatActivity() {
 
-    private lateinit var prefs: SharedPreferences
-    private lateinit var adManager: AdManager
+    private val prefs by lazy {
+        getSharedPreferences("sgs_snake_changer_prefs", Context.MODE_PRIVATE)
+    }
 
-    private lateinit var rootContainer: FrameLayout
-    private lateinit var bannerContainer: FrameLayout
-    private lateinit var tvPlayerId: TextView
-    private lateinit var tvUnlockInfo: TextView
-    private lateinit var tvLvBadge: TextView
-    private lateinit var tvCoinTop: TextView
-    private lateinit var tvScoreLvTop: TextView
-    private lateinit var tvSpeedTop: TextView
-    private lateinit var tvSoundTop: TextView
-    private lateinit var gameView: GameView
-    private lateinit var btnOkControl: Button
-
-    private lateinit var splashOverlay: LinearLayout
-    private lateinit var leftDrawer: LinearLayout
-    private lateinit var rightDrawer: LinearLayout
-
-    private var playerId = ""
-    private var coins = GameData.START_COINS
-    private var highScore = 0
-    private var curLv = 1
-    private var soundOn = true
-    private var vibOn = true
-    private var trailOn = true
-    private var selFood = 0
-    private var selBody = 0
-    private var selFull = 0
-    private var selHead = 0
-
-    private var backPressCount = 0
     private val uiHandler = Handler(Looper.getMainLooper())
-    private var activeModalDialog: AlertDialog? = null
+    private lateinit var adManager: AdManager
+    private lateinit var drawerLayout: DrawerLayout
+    private lateinit var gameView: GameView
+
+    private lateinit var playerIdText: TextView
+    private lateinit var unlockInfoText: TextView
+    private lateinit var curLvBadgeText: TextView
+    private lateinit var coinTopText: TextView
+    private lateinit var scoreLvTopText: TextView
+    private lateinit var speedTopText: TextView
+    private lateinit var soundTopText: TextView
+
+    private lateinit var loadingOverlay: FrameLayout
+    private lateinit var stepViews: List<TextView>
+    private lateinit var progressBarFill: View
+    private lateinit var loadPercentText: TextView
+    private lateinit var tapToEnterBtn: Button
+
+    private lateinit var panelContainer: FrameLayout
+    private var loadingTimer: Runnable? = null
+    private var loadProgress = 0
+    private var loadingFinished = false
+    private var wheelAnimator: ValueAnimator? = null
+
+    private var coins: Int = GameData.START_COINS
+    private var highScore: Int = 0
+    private var currentLevel: Int = 1
+    private var selectedFood: Int = 0
+    private var selectedBody: Int = 0
+    private var selectedFull: Int = 0
+    private var selectedHead: Int = 0
+
+    private var soundOn: Boolean = true
+    private var vibOn: Boolean = true
+    private var trailOn: Boolean = true
+    private var playerId: String = ""
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        prefs = getSharedPreferences("sgs_snake_prefs", MODE_PRIVATE)
+        loadSavedState()
         adManager = AdManager(this)
 
-        initPrefsState()
-        buildUi()
-        adManager.attachBanner(bannerContainer)
-        applyLevelTheme(syncFromLevel = true)
-        syncAllBars()
+        val root = buildRootLayout()
+        setContentView(root)
 
-        val uid = prefs.getString("uid", null) ?: "guest_$playerId".also {
-            prefs.edit().putString("uid", it).apply()
-        }
-        adManager.syncFirebaseUser(uid, coins, curLv, highScore) { rCoins, rLv, rHigh ->
-            var changed = false
-            if (rCoins != null && rCoins > coins) {
-                coins = rCoins
-                saveCoins(coins)
-                changed = true
-            }
-            if (rLv != null && rLv in 1..15 && isLevelUnlocked(rLv) && rLv > curLv) {
-                curLv = rLv
-                prefs.edit().putInt("curLv", curLv).apply()
-                changed = true
-            }
-            if (rHigh != null && rHigh > highScore) {
-                highScore = rHigh
-                prefs.edit().putInt("h", highScore).apply()
-                changed = true
-            }
-            if (changed) {
-                applyLevelTheme(syncFromLevel = true)
-                syncAllBars()
-            }
-        }
-
-        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
-            override fun handleOnBackPressed() {
-                handleSystemBack()
-            }
-        })
+        adManager.triggerTopBannerAd()
+        syncAllUi()
+        startFiveStepLoading()
     }
 
-    private fun initPrefsState() {
-        if (!prefs.contains("sgs_secure_c")) {
-            val oldC = prefs.getInt("c", GameData.START_COINS)
-            prefs.edit().putString("sgs_secure_c", GameData.encodeCoins(oldC)).apply()
-        }
-        coins = GameData.decodeCoins(prefs.getString("sgs_secure_c", null))
-
-        curLv = prefs.getInt("curLv", 1).coerceIn(1, 15)
-        prefs.edit().putInt("curLv", curLv).apply()
-
-        highScore = prefs.getInt("h", 0).coerceAtLeast(0)
-        prefs.edit().putInt("h", highScore).apply()
-
-        soundOn = prefs.getString("soundOn", "1") != "0"
-        vibOn = prefs.getString("vibOn", "1") != "0"
-        trailOn = prefs.getString("trailOn", "1") != "0"
-
-        var pid = prefs.getString("sgs_player_id", null)
-        if (pid.isNullOrBlank() || !pid.startsWith("SGS-")) {
+    private fun loadSavedState() {
+        val savedPid = prefs.getString("sgs_player_id", null)
+        playerId = if (!savedPid.isNullOrBlank() && savedPid.startsWith("SGS-")) {
+            savedPid
+        } else {
             val chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-            val randPart = buildString {
+            val randomPart = buildString {
                 repeat(6) { append(chars[Random.nextInt(chars.length)]) }
             }
-            pid = "SGS-$randPart"
-            prefs.edit().putString("sgs_player_id", pid).apply()
+            "SGS-$randomPart".also { prefs.edit().putString("sgs_player_id", it).apply() }
         }
-        playerId = pid
+
+        val encCoins = prefs.getString("sgs_secure_c", null)
+        coins = if (encCoins == null) {
+            val legacy = prefs.getInt("c", GameData.START_COINS).coerceAtLeast(0)
+            GameData.encodeCoins(legacy).also { prefs.edit().putString("sgs_secure_c", it).apply() }
+            legacy
+        } else {
+            GameData.decodeCoins(encCoins)
+        }
+
+        highScore = prefs.getInt("h", 0).coerceAtLeast(0)
+        currentLevel = prefs.getInt("curLv", 1).coerceIn(1, 15)
+        if (!isLevelUnlocked(currentLevel)) {
+            currentLevel = 1
+        }
+
+        selectedFood = prefs.getInt("sel_food", 0).coerceIn(0, GameData.foodItems.size - 1)
+        selectedBody = prefs.getInt("sel_body", 0).coerceIn(0, GameData.bodyItems.size - 1)
+        selectedFull = prefs.getInt("sel_full", 0).coerceIn(0, GameData.fullBodies.size - 1)
+        selectedHead = prefs.getInt("sel_head", 0).coerceIn(0, GameData.heads.size - 1)
+
+        soundOn = prefs.getBoolean("soundOn", true)
+        vibOn = prefs.getBoolean("vibOn", true)
+        trailOn = prefs.getBoolean("trailOn", true)
     }
 
-    private fun saveCoins(value: Int) {
-        coins = value.coerceAtLeast(0)
+    private fun updateCoins(newValue: Int) {
+        coins = newValue.coerceAtLeast(0)
         prefs.edit().putString("sgs_secure_c", GameData.encodeCoins(coins)).apply()
-        gameView.setCoinsValue(coins)
-        syncAllBars()
+        syncAllUi()
     }
 
-    private fun isLevelUnlocked(lv: Int): Boolean {
-        if (lv <= 1) return true
-        return prefs.getString("lvUnlock_$lv", "0") == "1"
+    private fun isLevelUnlocked(level: Int): Boolean {
+        if (level <= 1) return true
+        return prefs.getBoolean("lvUnlock_$level", false)
     }
 
-    private fun maxUnlockedLevel(): Int {
+    private fun highestUnlockedLevel(): Int {
         var maxLv = 1
-        for (i in 1..15) {
-            if (isLevelUnlocked(i)) maxLv = i
+        for (lv in 1..15) {
+            if (isLevelUnlocked(lv)) maxLv = lv
         }
         return maxLv
     }
 
-    private fun buildUi() {
-        rootContainer = FrameLayout(this).apply {
+    private fun isItemUnlocked(prefix: String, index: Int): Boolean {
+        return prefs.getBoolean("${prefix}_$index", false)
+    }
+
+    private fun unlockItem(prefix: String, index: Int) {
+        prefs.edit().putBoolean("${prefix}_$index", true).apply()
+    }
+
+    private fun buildRootLayout(): FrameLayout {
+        val hostFrame = FrameLayout(this).apply {
+            layoutParams = ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            )
             setBackgroundColor(Color.parseColor("#080810"))
         }
 
+        drawerLayout = DrawerLayout(this).apply {
+            layoutParams = FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            )
+            setScrimColor(Color.argb(170, 0, 0, 0))
+        }
+
         val mainColumn = LinearLayout(this).apply {
+            layoutParams = DrawerLayout.LayoutParams(
+                DrawerLayout.LayoutParams.MATCH_PARENT,
+                DrawerLayout.LayoutParams.MATCH_PARENT
+            )
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
-            setPadding(dp(10), dp(10), dp(10), dp(10))
+            setPadding(dp(10), dp(12), dp(10), dp(10))
+            setBackgroundColor(Color.parseColor("#080810"))
         }
 
-        bannerContainer = FrameLayout(this).apply {
-            setBackgroundColor(Color.parseColor("#111111"))
-            background = GradientDrawable().apply {
-                setColor(Color.parseColor("#111111"))
-                cornerRadius = dp(8).toFloat()
-                setStroke(dp(1), Color.parseColor("#3300FFFF"))
+        val topSpaceAndNav = LinearLayout(this).apply {
+            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(156)).apply {
+                bottomMargin = dp(10)
             }
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.BOTTOM
         }
-        mainColumn.addView(
-            bannerContainer,
-            LinearLayout.LayoutParams(dp(320), dp(50)).apply {
-                topMargin = dp(2)
-                bottomMargin = dp(8)
-            }
-        )
 
-        val playerCard = LinearLayout(this).apply {
+        val topNavRow = LinearLayout(this).apply {
+            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                topMargin = dp(56)
+            }
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(8), dp(6), dp(8), dp(6))
-            background = GradientDrawable().apply {
-                setColor(Color.parseColor("#111111"))
-                cornerRadius = dp(10).toFloat()
-                setStroke(dp(2), Color.parseColor("#00FFFF"))
+        }
+        val leftMenuBtn = makeSmallActionBtn("MENU") {
+            drawerLayout.openDrawer(GravityCompat.START)
+        }
+        val topSpacer = View(this).apply {
+            layoutParams = LinearLayout.LayoutParams(0, dp(1), 1f)
+        }
+        val rightSetBtn = makeSmallActionBtn("SET") {
+            drawerLayout.openDrawer(GravityCompat.END)
+        }
+        topNavRow.addView(leftMenuBtn)
+        topNavRow.addView(topSpacer)
+        topNavRow.addView(rightSetBtn)
+        topSpaceAndNav.addView(topNavRow)
+        mainColumn.addView(topSpaceAndNav)
+
+        val playerBox = LinearLayout(this).apply {
+            layoutParams = LinearLayout.LayoutParams(dp(360), ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                bottomMargin = dp(8)
             }
-            setOnClickListener { openProfileDialog() }
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(10), dp(7), dp(10), dp(7))
+            background = makeBoxDrawable("#111111", "#00ffff", 10f, 2)
+            setOnClickListener { openProfilePanel() }
         }
 
-        val avatarView = ImageView(this).apply {
-            setImageBitmap(createAvatarBitmap(dp(36)))
-            background = GradientDrawable().apply {
-                setColor(Color.BLACK)
-                cornerRadius = dp(6).toFloat()
-                setStroke(dp(2), Color.WHITE)
+        val avatarView = object : View(this) {
+            private val p = Paint(Paint.ANTI_ALIAS_FLAG)
+            private val tp = Paint(Paint.ANTI_ALIAS_FLAG).apply { textAlign = Paint.Align.CENTER }
+            override fun onDraw(canvas: Canvas) {
+                super.onDraw(canvas)
+                p.color = Color.parseColor("#0a0a1a")
+                canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), p)
+                p.color = Color.CYAN
+                canvas.drawCircle(width * 0.5f, height * 0.5f, width * 0.36f, p)
+                tp.color = Color.BLACK
+                tp.typeface = Typeface.DEFAULT_BOLD
+                tp.textSize = width * 0.32f
+                canvas.drawText("SGS", width * 0.5f, height * 0.62f, tp)
             }
+        }.apply {
+            layoutParams = LinearLayout.LayoutParams(dp(36), dp(36)).apply {
+                rightMargin = dp(8)
+            }
+            background = makeBoxDrawable("#0a0a1a", "#ffffff", 6f, 1)
         }
-        playerCard.addView(avatarView, LinearLayout.LayoutParams(dp(36), dp(36)))
+        playerBox.addView(avatarView)
 
-        val idCol = LinearLayout(this).apply {
+        val idColumn = LinearLayout(this).apply {
+            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(8), 0, dp(6), 0)
         }
-        tvPlayerId = TextView(this).apply {
-            setTextColor(Color.parseColor("#00FFFF"))
-            textSize = 10f
-            setTypeface(typeface, android.graphics.Typeface.BOLD)
+        playerIdText = TextView(this).apply {
+            setTextColor(Color.CYAN)
+            textSize = 11f
+            typeface = Typeface.DEFAULT_BOLD
         }
-        tvUnlockInfo = TextView(this).apply {
-            setTextColor(Color.parseColor("#AAAAAA"))
-            textSize = 8f
+        unlockInfoText = TextView(this).apply {
+            setTextColor(Color.parseColor("#aaaaaa"))
+            textSize = 9f
         }
-        idCol.addView(tvPlayerId)
-        idCol.addView(tvUnlockInfo)
-        playerCard.addView(idCol, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        idColumn.addView(playerIdText)
+        idColumn.addView(unlockInfoText)
+        playerBox.addView(idColumn)
 
-        tvLvBadge = TextView(this).apply {
+        curLvBadgeText = TextView(this).apply {
             setTextColor(Color.BLACK)
             textSize = 10f
-            setTypeface(typeface, android.graphics.Typeface.BOLD)
-            setPadding(dp(8), dp(4), dp(8), dp(4))
-            background = GradientDrawable().apply {
-                setColor(Color.parseColor("#00FFFF"))
-                cornerRadius = dp(12).toFloat()
-            }
+            typeface = Typeface.DEFAULT_BOLD
+            setPadding(dp(10), dp(4), dp(10), dp(4))
+            background = makeBoxDrawable("#00ffff", "#00ffff", 12f, 0)
         }
-        playerCard.addView(tvLvBadge)
+        playerBox.addView(curLvBadgeText)
+        mainColumn.addView(playerBox)
 
-        mainColumn.addView(
-            playerCard,
-            LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
-                bottomMargin = dp(8)
+        val gameWrap = LinearLayout(this).apply {
+            layoutParams = LinearLayout.LayoutParams(dp(360), ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                bottomMargin = dp(10)
             }
-        )
-
-        val gameCard = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            background = GradientDrawable().apply {
-                setColor(Color.parseColor("#11111EE8"))
-                cornerRadius = dp(16).toFloat()
-                setStroke(dp(2), Color.parseColor("#00FFFF"))
-            }
-            setPadding(dp(3), dp(3), dp(3), dp(3))
         }
 
-        val canvasTopBar = LinearLayout(this).apply {
+        val hudBar = LinearLayout(this).apply {
+            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(28)).apply {
+                bottomMargin = dp(2)
+            }
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(8), dp(4), dp(8), dp(4))
+            setPadding(dp(8), 0, dp(8), 0)
+            background = makeBoxDrawable("#11111e", "#00ffff", 8f, 1)
         }
 
-        tvCoinTop = TextView(this).apply {
-            setTextColor(Color.parseColor("#00FFFF"))
-            textSize = 9f
-            setTypeface(typeface, android.graphics.Typeface.BOLD)
+        coinTopText = TextView(this).apply {
+            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+            setTextColor(Color.CYAN)
+            textSize = 10f
+            typeface = Typeface.DEFAULT_BOLD
         }
-        tvScoreLvTop = TextView(this).apply {
-            setTextColor(Color.parseColor("#FFEB3B"))
-            textSize = 9f
+        scoreLvTopText = TextView(this).apply {
+            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1.3f)
+            setTextColor(Color.parseColor("#ffeb3b"))
+            textSize = 10f
+            typeface = Typeface.DEFAULT_BOLD
             gravity = Gravity.CENTER
-            setTypeface(typeface, android.graphics.Typeface.BOLD)
         }
-        tvSpeedTop = TextView(this).apply {
-            setTextColor(Color.parseColor("#00FFFF"))
-            textSize = 9f
+        speedTopText = TextView(this).apply {
+            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+            setTextColor(Color.CYAN)
+            textSize = 10f
+            typeface = Typeface.DEFAULT_BOLD
             gravity = Gravity.END
-            setTypeface(typeface, android.graphics.Typeface.BOLD)
         }
-        tvSoundTop = TextView(this).apply {
-            setTextColor(Color.parseColor("#00FF88"))
-            textSize = 9f
-            gravity = Gravity.END
-            setTypeface(typeface, android.graphics.Typeface.BOLD)
-            setPadding(dp(8), 0, 0, 0)
+        soundTopText = TextView(this).apply {
+            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                leftMargin = dp(8)
+            }
+            setTextColor(Color.parseColor("#00ff88"))
+            textSize = 10f
+            typeface = Typeface.DEFAULT_BOLD
             setOnClickListener { toggleSound() }
         }
 
-        canvasTopBar.addView(tvCoinTop, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-        canvasTopBar.addView(tvScoreLvTop, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1.2f))
-        canvasTopBar.addView(tvSpeedTop, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
-        canvasTopBar.addView(tvSoundTop, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
-        gameCard.addView(canvasTopBar)
+        hudBar.addView(coinTopText)
+        hudBar.addView(scoreLvTopText)
+        hudBar.addView(speedTopText)
+        hudBar.addView(soundTopText)
+        gameWrap.addView(hudBar)
 
+        val canvasFrame = FrameLayout(this).apply {
+            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(180))
+            background = makeBoxDrawable("#000000", "#00ffff", 12f, 2)
+            clipToOutline = true
+        }
         gameView = GameView(this).apply {
-            listener = object : GameView.Listener {
-                override fun onCoinsEarned(newCoins: Int, isSpecial: Boolean) {
-                    saveCoins(newCoins)
-                    adManager.syncFirebaseUser(
-                        prefs.getString("uid", "guest_$playerId") ?: "guest_$playerId",
-                        coins,
-                        curLv,
-                        highScore
-                    )
+            layoutParams = FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            )
+            onHudChanged = { sc, spd, lv ->
+                runOnUiThread {
+                    scoreLvTopText.text = "SC $sc | Lv $lv"
+                    speedTopText.text = "SPD ${spd}ms"
                 }
-
-                override fun onScoreUpdated(score: Int, highScore: Int, speedMs: Long) {
-                    if (highScore > this@MainActivity.highScore) {
-                        this@MainActivity.highScore = highScore
+            }
+            onCoinsEarned = { amount, _ ->
+                runOnUiThread {
+                    updateCoins(coins + amount)
+                }
+            }
+            onGameOver = { finalScore, _ ->
+                runOnUiThread {
+                    if (finalScore > highScore) {
+                        highScore = finalScore
                         prefs.edit().putInt("h", highScore).apply()
                     }
-                    tvScoreLvTop.text = "SC $score | Lv $curLv"
-                    tvSpeedTop.text = "SPD ${speedMs}ms"
+                    syncAllUi()
                 }
-
-                override fun onGameOver(finalScore: Int, highScore: Int) {
-                    this@MainActivity.highScore = maxOf(this@MainActivity.highScore, highScore)
-                    prefs.edit().putInt("h", this@MainActivity.highScore).apply()
-                    btnOkControl.text = "OK"
-                    adManager.syncFirebaseUser(
-                        prefs.getString("uid", "guest_$playerId") ?: "guest_$playerId",
-                        coins,
-                        curLv,
-                        this@MainActivity.highScore
-                    )
-                }
-
-                override fun onPauseChanged(paused: Boolean, waiting: Boolean) {
-                    btnOkControl.text = if (!paused && !waiting) "PAUSE" else "OK"
-                }
-
-                override fun onWinLevel() {
-                    Toast.makeText(this@MainActivity, "YOU WIN!", Toast.LENGTH_SHORT).show()
+            }
+            onBoardTap = {
+                runOnUiThread {
+                    gameView.togglePauseMatch()
                 }
             }
         }
+        canvasFrame.addView(gameView)
+        gameWrap.addView(canvasFrame)
+        mainColumn.addView(gameWrap)
 
-        gameCard.addView(
-            gameView,
-            LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f)
-        )
-
-        mainColumn.addView(
-            gameCard,
-            LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f).apply {
-                topMargin = dp(4)
-                bottomMargin = dp(6)
-            }
-        )
-
-        val hintTv = TextView(this).apply {
-            text = "← Tap MENU / SET Handles for Drawers →"
-            setTextColor(Color.parseColor("#777777"))
-            textSize = 8f
-            gravity = Gravity.CENTER
-        }
-        mainColumn.addView(hintTv, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
-            bottomMargin = dp(6)
-        })
-
-        val dpad = buildDpad()
-        mainColumn.addView(dpad, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
-            bottomMargin = dp(6)
-        })
-
-        rootContainer.addView(
-            mainColumn,
-            FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT)
-        )
-
-        val leftHandle = TextView(this).apply {
-            text = "MENU"
-            setTextColor(Color.BLACK)
-            textSize = 8f
-            gravity = Gravity.CENTER
-            setTypeface(typeface, android.graphics.Typeface.BOLD)
-            background = GradientDrawable().apply {
-                setColor(Color.parseColor("#DD00FFFF"))
-                cornerRadii = floatArrayOf(0f, 0f, dp(6).toFloat(), dp(6).toFloat(), dp(6).toFloat(), dp(6).toFloat(), 0f, 0f)
-            }
-            setOnClickListener { toggleLeftDrawer() }
-        }
-        rootContainer.addView(
-            leftHandle,
-            FrameLayout.LayoutParams(dp(22), dp(46)).apply {
-                gravity = Gravity.START or Gravity.CENTER_VERTICAL
-            }
-        )
-
-        val rightHandle = TextView(this).apply {
-            text = "SET"
-            setTextColor(Color.BLACK)
-            textSize = 8f
-            gravity = Gravity.CENTER
-            setTypeface(typeface, android.graphics.Typeface.BOLD)
-            background = GradientDrawable().apply {
-                setColor(Color.parseColor("#DD00FF88"))
-                cornerRadii = floatArrayOf(dp(6).toFloat(), dp(6).toFloat(), 0f, 0f, 0f, 0f, dp(6).toFloat(), dp(6).toFloat())
-            }
-            setOnClickListener { toggleRightDrawer() }
-        }
-        rootContainer.addView(
-            rightHandle,
-            FrameLayout.LayoutParams(dp(22), dp(46)).apply {
-                gravity = Gravity.END or Gravity.CENTER_VERTICAL
-            }
-        )
-
-        leftDrawer = buildLeftDrawer()
-        rootContainer.addView(
-            leftDrawer,
-            FrameLayout.LayoutParams(dp(170), LinearLayout.LayoutParams.WRAP_CONTENT).apply {
-                gravity = Gravity.START or Gravity.CENTER_VERTICAL
-                leftMargin = dp(24)
-            }
-        )
-
-        rightDrawer = buildRightDrawer()
-        rootContainer.addView(
-            rightDrawer,
-            FrameLayout.LayoutParams(dp(170), LinearLayout.LayoutParams.WRAP_CONTENT).apply {
-                gravity = Gravity.END or Gravity.CENTER_VERTICAL
-                rightMargin = dp(24)
-            }
-        )
-
-        splashOverlay = buildSplashOverlay()
-        rootContainer.addView(
-            splashOverlay,
-            FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT)
-        )
-
-        setContentView(rootContainer)
-    }
-
-    private fun buildDpad(): LinearLayout {
-        val boxSize = dp(64)
-        val btnH = dp(48)
-        val gap = dp(6)
-
-        fun makePadBtn(label: String, bgHex: String, fgHex: String, onClick: () -> Unit): Button {
-            return Button(this).apply {
-                text = label
-                setTextColor(Color.parseColor(fgHex))
-                textSize = if (label == "OK" || label == "PAUSE") 11f else 17f
-                setTypeface(typeface, android.graphics.Typeface.BOLD)
-                isAllCaps = false
-                background = GradientDrawable().apply {
-                    setColor(Color.parseColor(bgHex))
-                    cornerRadius = dp(14).toFloat()
-                    setStroke(dp(2), Color.parseColor("#8800FFFF"))
-                }
-                setOnClickListener {
-                    closeDrawers()
-                    onClick()
-                }
-            }
-        }
-
-        return LinearLayout(this).apply {
+        val dpadGrid = LinearLayout(this).apply {
+            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT)
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
-
-            val r1 = LinearLayout(this@MainActivity).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.CENTER
-            }
-            r1.addView(makePadBtn("↑", "#15151F", "#00FFFF") { gameView.setDirection(GameView.Direction.UP) }, LinearLayout.LayoutParams(boxSize, btnH))
-            addView(r1, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { bottomMargin = gap })
-
-            val r2 = LinearLayout(this@MainActivity).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.CENTER
-            }
-            r2.addView(makePadBtn("←", "#15151F", "#00FFFF") { gameView.setDirection(GameView.Direction.LEFT) }, LinearLayout.LayoutParams(boxSize, btnH).apply { marginEnd = gap })
-            btnOkControl = makePadBtn("OK", "#00FFFF", "#000000") { gameView.togglePauseOrStart() }
-            r2.addView(btnOkControl, LinearLayout.LayoutParams(boxSize, btnH).apply { marginEnd = gap })
-            r2.addView(makePadBtn("→", "#15151F", "#00FFFF") { gameView.setDirection(GameView.Direction.RIGHT) }, LinearLayout.LayoutParams(boxSize, btnH))
-            addView(r2, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { bottomMargin = gap })
-
-            val r3 = LinearLayout(this@MainActivity).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.CENTER
-            }
-            r3.addView(makePadBtn("↓", "#15151F", "#00FFFF") { gameView.setDirection(GameView.Direction.DOWN) }, LinearLayout.LayoutParams(boxSize, btnH))
-            addView(r3)
         }
+
+        val rowTop = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+            setPadding(0, 0, 0, dp(6))
+        }
+        rowTop.addView(makeControlButton("↑", isOk = false) { gameView.steer(GameView.Direction.UP) })
+        dpadGrid.addView(rowTop)
+
+        val rowMid = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+            setPadding(0, 0, 0, dp(6))
+        }
+        rowMid.addView(makeControlButton("←", isOk = false) { gameView.steer(GameView.Direction.LEFT) })
+        val okBtn = makeControlButton("OK", isOk = true) { gameView.togglePauseMatch() }.apply {
+            (layoutParams as LinearLayout.LayoutParams).apply {
+                leftMargin = dp(6)
+                rightMargin = dp(6)
+            }
+        }
+        rowMid.addView(okBtn)
+        rowMid.addView(makeControlButton("→", isOk = false) { gameView.steer(GameView.Direction.RIGHT) })
+        dpadGrid.addView(rowMid)
+
+        val rowBot = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+        }
+        rowBot.addView(makeControlButton("↓", isOk = false) { gameView.steer(GameView.Direction.DOWN) })
+        dpadGrid.addView(rowBot)
+        mainColumn.addView(dpadGrid)
+
+        drawerLayout.addView(mainColumn)
+        drawerLayout.addView(buildLeftDrawer())
+        drawerLayout.addView(buildRightDrawer())
+        hostFrame.addView(drawerLayout)
+
+        panelContainer = FrameLayout(this).apply {
+            layoutParams = FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            )
+            setBackgroundColor(Color.argb(245, 0, 0, 0))
+            visibility = View.GONE
+            isClickable = true
+            isFocusable = true
+        }
+        hostFrame.addView(panelContainer)
+
+        loadingOverlay = buildLoadingOverlay()
+        hostFrame.addView(loadingOverlay)
+
+        return hostFrame
     }
 
     private fun buildLeftDrawer(): LinearLayout {
         return LinearLayout(this).apply {
+            layoutParams = DrawerLayout.LayoutParams(dp(180), DrawerLayout.LayoutParams.MATCH_PARENT, GravityCompat.START)
             orientation = LinearLayout.VERTICAL
-            visibility = View.GONE
-            setPadding(dp(10), dp(10), dp(10), dp(10))
-            background = GradientDrawable().apply {
-                setColor(Color.parseColor("#F5000000"))
-                cornerRadius = dp(12).toFloat()
-                setStroke(dp(2), Color.parseColor("#00FFFF"))
-            }
+            setPadding(dp(12), dp(20), dp(12), dp(20))
+            setBackgroundColor(Color.parseColor("#0c0c16"))
 
             addView(TextView(this@MainActivity).apply {
                 text = "LEFT MENU"
-                setTextColor(Color.parseColor("#00FFFF"))
-                textSize = 10f
-                setTypeface(typeface, android.graphics.Typeface.BOLD)
+                setTextColor(Color.CYAN)
+                textSize = 12f
+                typeface = Typeface.DEFAULT_BOLD
+                setPadding(0, 0, 0, dp(12))
             })
-            addView(drawerBtn("SHOP UNIQUE", "#15151F", "#00FFFF") { openShopDialog() })
-            addView(drawerBtn("LEVELS LOCK", "#15151F", "#00FFFF") { openLevelsDialog() })
-            addView(drawerBtn("SPIN WHEEL", "#15151F", "#00FFFF") { openSpinDialog() })
-            addView(drawerBtn("EXIT APP", "#FF4444", "#FFFFFF") { exitGame() })
-            addView(drawerBtn("CLOSE", "#15151F", "#00FFFF") { closeDrawers() })
+
+            addView(makeDrawerBtn("SHOP UNIQUE", "#15151f", "#00ffff") {
+                drawerLayout.closeDrawers()
+                openShopPanel(0)
+            })
+            addView(makeDrawerBtn("LEVELS LOCK", "#15151f", "#00ffff") {
+                drawerLayout.closeDrawers()
+                openLevelsPanel()
+            })
+            addView(makeDrawerBtn("SPIN WHEEL", "#15151f", "#00ff88") {
+                drawerLayout.closeDrawers()
+                openSpinWheelPanel()
+            })
+            addView(makeDrawerBtn("EXIT APP", "#ff4444", "#ffffff") {
+                drawerLayout.closeDrawers()
+                showExitConfirmDialog()
+            })
         }
     }
 
     private fun buildRightDrawer(): LinearLayout {
         return LinearLayout(this).apply {
+            layoutParams = DrawerLayout.LayoutParams(dp(180), DrawerLayout.LayoutParams.MATCH_PARENT, GravityCompat.END)
             orientation = LinearLayout.VERTICAL
-            visibility = View.GONE
-            setPadding(dp(10), dp(10), dp(10), dp(10))
-            background = GradientDrawable().apply {
-                setColor(Color.parseColor("#F5000000"))
-                cornerRadius = dp(12).toFloat()
-                setStroke(dp(2), Color.parseColor("#00FF88"))
-            }
+            setPadding(dp(12), dp(20), dp(12), dp(20))
+            setBackgroundColor(Color.parseColor("#0c0c16"))
 
             addView(TextView(this@MainActivity).apply {
                 text = "RIGHT MENU"
-                setTextColor(Color.parseColor("#00FF88"))
-                textSize = 10f
-                setTypeface(typeface, android.graphics.Typeface.BOLD)
+                setTextColor(Color.parseColor("#00ff88"))
+                textSize = 12f
+                typeface = Typeface.DEFAULT_BOLD
+                setPadding(0, 0, 0, dp(12))
             })
-            addView(drawerBtn("SETTINGS", "#00FF88", "#000000") { openSettingsDialog() })
-            addView(drawerBtn("SOUND ON/OFF", "#15151F", "#00FFFF") { toggleSound() })
-            addView(drawerBtn("OK PAUSE", "#00FFFF", "#000000") { gameView.togglePauseOrStart() })
+
+            addView(makeDrawerBtn("SETTINGS", "#00ff88", "#000000") {
+                drawerLayout.closeDrawers()
+                openSettingsPanel()
+            })
+            addView(makeDrawerBtn("SOUND ON/OFF", "#15151f", "#00ffff") {
+                drawerLayout.closeDrawers()
+                toggleSound()
+            })
+            addView(makeDrawerBtn("OK PAUSE/PLAY", "#00ffff", "#000000") {
+                drawerLayout.closeDrawers()
+                gameView.togglePauseMatch()
+            })
         }
     }
 
-    private fun drawerBtn(label: String, bgHex: String, fgHex: String, onClick: () -> Unit): Button {
-        return Button(this).apply {
-            text = label
-            setTextColor(Color.parseColor(fgHex))
-            textSize = 9f
-            setTypeface(typeface, android.graphics.Typeface.BOLD)
-            isAllCaps = false
-            background = GradientDrawable().apply {
-                setColor(Color.parseColor(bgHex))
-                cornerRadius = dp(8).toFloat()
-                setStroke(dp(1), Color.parseColor("#5500FFFF"))
+    private fun showExitConfirmDialog() {
+        gameView.pauseMatch()
+        AlertDialog.Builder(this)
+            .setTitle("EXIT ${GameData.GAME_NAME.uppercase()}")
+            .setMessage("Are you sure you want to exit the game?")
+            .setPositiveButton("YES") { _, _ ->
+                finishAffinity()
             }
-            setOnClickListener {
-                closeDrawers()
-                onClick()
+            .setNegativeButton("NO") { dialog, _ ->
+                dialog.dismiss()
             }
-        }.also {
-            it.layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(36)).apply {
-                topMargin = dp(6)
-            }
-        }
+            .show()
     }
 
-    private fun buildSplashOverlay(): LinearLayout {
-        val overlay = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER
+    private fun buildLoadingOverlay(): FrameLayout {
+        val overlay = FrameLayout(this).apply {
+            layoutParams = FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            )
             setBackgroundColor(Color.BLACK)
-            setPadding(dp(24), dp(24), dp(24), dp(24))
+            visibility = View.VISIBLE
+            isClickable = true
+            isFocusable = true
         }
 
-        val logo = TextView(this).apply {
-            text = GameData.BRAND
-            setTextColor(Color.BLACK)
-            textSize = 20f
+        val centerCol = LinearLayout(this).apply {
+            layoutParams = FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                Gravity.CENTER
+            )
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_HORIZONTAL
+            setPadding(dp(20), dp(20), dp(20), dp(20))
+        }
+
+        val logoBox = TextView(this).apply {
+            layoutParams = LinearLayout.LayoutParams(dp(84), dp(84)).apply {
+                bottomMargin = dp(18)
+            }
+            text = "SGS"
             gravity = Gravity.CENTER
-            setTypeface(typeface, android.graphics.Typeface.BOLD)
+            setTextColor(Color.BLACK)
+            textSize = 22f
+            typeface = Typeface.DEFAULT_BOLD
             background = GradientDrawable(
                 GradientDrawable.Orientation.TL_BR,
-                intArrayOf(Color.parseColor("#00FF88"), Color.parseColor("#00FFFF"))
+                intArrayOf(Color.parseColor("#00ff88"), Color.CYAN)
             ).apply {
                 cornerRadius = dp(18).toFloat()
                 setStroke(dp(2), Color.WHITE)
             }
         }
-        overlay.addView(logo, LinearLayout.LayoutParams(dp(84), dp(84)).apply { bottomMargin = dp(16) })
+        centerCol.addView(logoBox)
 
-        val stepLabels = listOf(
+        val stepsCol = LinearLayout(this).apply {
+            layoutParams = LinearLayout.LayoutParams(dp(270), ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                bottomMargin = dp(14)
+            }
+            orientation = LinearLayout.VERTICAL
+        }
+
+        val initialLabels = listOf(
             "☐ Engine Starting...",
             "☐ Levels Checking...",
             "☐ Skins Checking...",
             "☐ Coins & Server Sync...",
             "☐ Player Ready..."
         )
-        val doneLabels = listOf(
+        stepViews = initialLabels.map { label ->
+            TextView(this).apply {
+                text = label
+                setTextColor(Color.parseColor("#666666"))
+                textSize = 11f
+                typeface = Typeface.DEFAULT_BOLD
+                setPadding(0, dp(3), 0, dp(3))
+                stepsCol.addView(this)
+            }
+        }
+        centerCol.addView(stepsCol)
+
+        val barBg = FrameLayout(this).apply {
+            layoutParams = LinearLayout.LayoutParams(dp(260), dp(8)).apply {
+                bottomMargin = dp(6)
+            }
+            background = makeBoxDrawable("#1a1a1a", "#1a1a1a", 10f, 0)
+            clipToOutline = true
+        }
+        progressBarFill = View(this).apply {
+            layoutParams = FrameLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT)
+            setBackgroundColor(Color.parseColor("#00ff88"))
+        }
+        barBg.addView(progressBarFill)
+        centerCol.addView(barBg)
+
+        loadPercentText = TextView(this).apply {
+            text = "0%"
+            setTextColor(Color.parseColor("#00ff88"))
+            textSize = 11f
+            typeface = Typeface.DEFAULT_BOLD
+        }
+        centerCol.addView(loadPercentText)
+
+        tapToEnterBtn = Button(this).apply {
+            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(42)).apply {
+                topMargin = dp(16)
+            }
+            text = "TAP TO ENTER - SGS"
+            setTextColor(Color.BLACK)
+            textSize = 12f
+            typeface = Typeface.DEFAULT_BOLD
+            setPadding(dp(24), 0, dp(24), 0)
+            background = makeBoxDrawable("#00ff88", "#00ff88", 20f, 0)
+            visibility = View.GONE
+            setOnClickListener { finishLoadingAndEnterGame() }
+        }
+        centerCol.addView(tapToEnterBtn)
+
+        overlay.addView(centerCol)
+        return overlay
+    }
+
+    private fun startFiveStepLoading() {
+        loadProgress = 0
+        loadingFinished = false
+        tapToEnterBtn.visibility = View.GONE
+
+        val completedSteps = listOf(
             "☑ Engine Hissing Active - SGS Core",
             "☑ 15 Levels OK - 15 Snakes Found",
             "☑ Skins OK - Food Body Head Ready",
             "☑ Coins Encrypted & Server Secure",
             "☑ Player Ready - Snake Changer SGS"
         )
-        val stepViews = stepLabels.map { raw ->
-            TextView(this).apply {
-                text = raw
-                setTextColor(Color.parseColor("#777777"))
-                textSize = 10f
-                setTypeface(typeface, android.graphics.Typeface.BOLD)
-                setPadding(0, dp(3), 0, dp(3))
-                overlay.addView(this)
-            }
-        }
+        val thresholds = listOf(5, 28, 48, 70, 88)
 
-        val progressBar = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
-            max = 100
-            progress = 0
-            progressDrawable.setColorFilter(Color.parseColor("#00FF88"), android.graphics.PorterDuff.Mode.SRC_IN)
-        }
-        overlay.addView(progressBar, LinearLayout.LayoutParams(dp(260), dp(10)).apply { topMargin = dp(14) })
-
-        val pctTv = TextView(this).apply {
-            text = "0%"
-            setTextColor(Color.parseColor("#00FF88"))
-            textSize = 10f
-            gravity = Gravity.CENTER
-            setTypeface(typeface, android.graphics.Typeface.BOLD)
-        }
-        overlay.addView(pctTv, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(6) })
-
-        val tapBtn = Button(this).apply {
-            text = "TAP TO ENTER - SGS"
-            visibility = View.GONE
-            setTextColor(Color.BLACK)
-            textSize = 11f
-            setTypeface(typeface, android.graphics.Typeface.BOLD)
-            isAllCaps = false
-            background = GradientDrawable().apply {
-                setColor(Color.parseColor("#00FF88"))
-                cornerRadius = dp(20).toFloat()
-            }
-            setOnClickListener {
-                overlay.visibility = View.GONE
-                gameView.resetForLevel(keepWaiting = true)
-            }
-        }
-        overlay.addView(tapBtn, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dp(42)).apply { topMargin = dp(14) })
-
-        val thresholds = intArrayOf(5, 28, 48, 70, 88)
-        var pct = 0
-        val loaderRunnable = object : Runnable {
+        val tick = object : Runnable {
             override fun run() {
-                pct += 2
-                if (pct > 100) pct = 100
-                progressBar.progress = pct
-                pctTv.text = "$pct%"
-                thresholds.forEachIndexed { idx, th ->
-                    if (pct >= th) {
-                        stepViews[idx].text = doneLabels[idx]
-                        stepViews[idx].setTextColor(Color.parseColor("#00FF88"))
+                if (loadingFinished) return
+                loadProgress = (loadProgress + 2).coerceAtMost(100)
+                loadPercentText.text = "$loadProgress%"
+
+                val maxFillWidth = dp(260)
+                progressBarFill.layoutParams = FrameLayout.LayoutParams(
+                    (maxFillWidth * loadProgress) / 100,
+                    ViewGroup.LayoutParams.MATCH_PARENT
+                )
+
+                for (i in thresholds.indices) {
+                    if (loadProgress >= thresholds[i]) {
+                        stepViews[i].text = completedSteps[i]
+                        stepViews[i].setTextColor(Color.parseColor("#00ff88"))
                     }
                 }
-                if (pct < 100) {
-                    uiHandler.postDelayed(this, 60L)
+
+                if (loadProgress >= 100) {
+                    tapToEnterBtn.visibility = View.VISIBLE
+                    uiHandler.postDelayed({
+                        if (!loadingFinished) finishLoadingAndEnterGame()
+                    }, 900)
                 } else {
-                    tapBtn.visibility = View.VISIBLE
+                    loadingTimer = this
+                    uiHandler.postDelayed(this, 60)
                 }
             }
         }
-        uiHandler.postDelayed(loaderRunnable, 80L)
-        uiHandler.postDelayed({
-            if (overlay.visibility == View.VISIBLE) {
-                overlay.visibility = View.GONE
-                gameView.resetForLevel(keepWaiting = true)
+        loadingTimer = tick
+        uiHandler.postDelayed(tick, 60)
+    }
+
+    private fun finishLoadingAndEnterGame() {
+        if (loadingFinished) return
+        loadingFinished = true
+        loadingTimer?.let { uiHandler.removeCallbacks(it) }
+        loadingOverlay.visibility = View.GONE
+        syncAllUi()
+        gameView.startNewMatch(autoBegin = false)
+    }
+
+    private fun openSettingsPanel() {
+        gameView.pauseMatch()
+        showPanel(title = "SETTINGS & PRIVACY POLICY - ${GameData.GAME_NAME}") { body ->
+            body.addView(makeInfoCard(
+                title = "${GameData.GAME_NAME.uppercase()} - ${GameData.BRAND}",
+                lines = listOf(
+                    "ID: $playerId",
+                    "Lv: $currentLevel | Coin: $coins | Best: $highScore"
+                ),
+                borderHex = "#00ffff",
+                titleHex = "#00ffff"
+            ))
+
+            val rateCard = LinearLayout(this).apply {
+                layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                    bottomMargin = dp(10)
+                }
+                orientation = LinearLayout.VERTICAL
+                gravity = Gravity.CENTER
+                setPadding(dp(12), dp(12), dp(12), dp(12))
+                background = makeBoxDrawable("#111111", "#ffeb3b", 12f, 2)
             }
-        }, 5500L)
+            rateCard.addView(TextView(this).apply {
+                text = "Rating 3+"
+                setTextColor(Color.parseColor("#ffeb3b"))
+                textSize = 13f
+                typeface = Typeface.DEFAULT_BOLD
+            })
+            rateCard.addView(TextView(this).apply {
+                text = "Tap to Rate & Write Message (+${GameData.RATE_BONUS_COINS} Bonus Coins)"
+                setTextColor(Color.parseColor("#aaaaaa"))
+                textSize = 10f
+                setPadding(0, dp(4), 0, dp(8))
+            })
+            rateCard.addView(Button(this).apply {
+                text = "RATE US"
+                setTextColor(Color.BLACK)
+                textSize = 11f
+                typeface = Typeface.DEFAULT_BOLD
+                setPadding(dp(20), dp(6), dp(20), dp(6))
+                background = makeBoxDrawable("#ffeb3b", "#ffeb3b", 20f, 0)
+                setOnClickListener {
+                    try {
+                        startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(GameData.UPTODOWN_URL)))
+                    } catch (_: Exception) {
+                    }
+                    if (!prefs.getBoolean("rated", false)) {
+                        prefs.edit().putBoolean("rated", true).apply()
+                        updateCoins(coins + GameData.RATE_BONUS_COINS)
+                        showSimpleDialog("Rating Recorded", "+${GameData.RATE_BONUS_COINS} Bonus Coins Added!")
+                    }
+                }
+            })
+            body.addView(rateCard)
 
-        return overlay
-    }
+            body.addView(makeToggleRow("Sound Effects", soundOn) {
+                toggleSound()
+                openSettingsPanel()
+            })
+            body.addView(makeToggleRow("Vibration", vibOn) {
+                vibOn = !vibOn
+                prefs.edit().putBoolean("vibOn", vibOn).apply()
+                gameView.configureSettings(soundOn, vibOn, trailOn)
+                openSettingsPanel()
+            })
+            body.addView(makeToggleRow("Trail Effect", trailOn) {
+                trailOn = !trailOn
+                prefs.edit().putBoolean("trailOn", trailOn).apply()
+                gameView.configureSettings(soundOn, vibOn, trailOn)
+                openSettingsPanel()
+            })
 
-    private fun applyLevelTheme(syncFromLevel: Boolean) {
-        curLv = curLv.coerceIn(1, 15)
-        prefs.edit().putInt("curLv", curLv).apply()
-        val cfg = GameData.safeLevel(curLv)
-        if (syncFromLevel) {
-            selFood = cfg.food
-            selBody = cfg.body
-            selFull = cfg.full
-            selHead = cfg.head
+            val resetRow = LinearLayout(this).apply {
+                layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                    topMargin = dp(4)
+                    bottomMargin = dp(10)
+                }
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(dp(12), dp(10), dp(12), dp(10))
+                background = makeBoxDrawable("#111111", "#222222", 10f, 1)
+            }
+            resetRow.addView(TextView(this).apply {
+                layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+                text = "Secure Data Reset (Clears Score Only)"
+                setTextColor(Color.WHITE)
+                textSize = 11f
+            })
+            resetRow.addView(Button(this).apply {
+                text = "SECURE RESET"
+                setTextColor(Color.WHITE)
+                textSize = 10f
+                typeface = Typeface.DEFAULT_BOLD
+                setPadding(dp(12), dp(6), dp(12), dp(6))
+                background = makeBoxDrawable("#ff4444", "#ff4444", 18f, 0)
+                setOnClickListener {
+                    AlertDialog.Builder(this@MainActivity)
+                        .setTitle("Secure Reset")
+                        .setMessage("Reset your high score only? Coins, Levels & Shop items stay safe.")
+                        .setPositiveButton("YES") { _, _ ->
+                            highScore = 0
+                            prefs.edit().putInt("h", 0).apply()
+                            syncAllUi()
+                            openSettingsPanel()
+                        }
+                        .setNegativeButton("NO", null)
+                        .show()
+                }
+            })
+            body.addView(resetRow)
+
+            body.addView(makeInfoCard(
+                title = "Game Info & Official Privacy Policy",
+                lines = listOf(
+                    "• Game Name: ${GameData.GAME_NAME} (${GameData.BRAND} Edition)",
+                    "• Studio: ${GameData.STUDIO} | Developer: ${GameData.DEVELOPER}",
+                    "• Content Rating: Everyone 3+",
+                    "• Privacy Policy: Coins, high-scores, and progress are saved securely in local storage."
+                ),
+                borderHex = "#00ff88",
+                titleHex = "#00ff88"
+            ))
         }
-        gameView.configure(curLv, coins, highScore, trailOn, selFood, selBody, selFull, selHead)
     }
 
-    private fun syncAllBars() {
-        val maxLv = maxUnlockedLevel()
-        tvPlayerId.text = "ID: $playerId"
-        tvUnlockInfo.text = "Unlock: Lv $maxLv/15 | Left: ${15 - maxLv}"
-        tvLvBadge.text = "Lv $curLv"
-        tvCoinTop.text = "COIN $coins"
-        tvScoreLvTop.text = "SC 0 | Lv $curLv"
-        tvSpeedTop.text = "SPD ${gameView.getSpeedMs()}ms"
-        tvSoundTop.text = if (soundOn) "SOUND" else "MUTE"
+    private fun openLevelsPanel() {
+        gameView.pauseMatch()
+        showPanel(title = "LEVELS - 15 Levels 15 Snakes") { body ->
+            for (lv in 1..15) {
+                val cfg = GameData.safeLevel(lv)
+                val fullModel = GameData.safeFull(cfg.full)
+                val cost = GameData.levelCosts[lv - 1]
+                val unlocked = isLevelUnlocked(lv)
+                val isCurrent = currentLevel == lv
+
+                val borderHex = when {
+                    isCurrent -> "#00ffff"
+                    unlocked -> "#00ff88"
+                    else -> "#ff4444"
+                }
+
+                val card = LinearLayout(this).apply {
+                    layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                        bottomMargin = dp(8)
+                    }
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                    setPadding(dp(12), dp(10), dp(12), dp(10))
+                    background = makeBoxDrawable("#15151f", borderHex, 12f, 2)
+                }
+
+                val infoCol = LinearLayout(this).apply {
+                    layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+                    orientation = LinearLayout.VERTICAL
+                }
+                val costLabel = if (cost == 0) "FREE" else "${cost} Coin"
+                infoCol.addView(TextView(this).apply {
+                    text = "Lv$lv ${fullModel.name} - $costLabel"
+                    setTextColor(Color.WHITE)
+                    textSize = 11f
+                    typeface = Typeface.DEFAULT_BOLD
+                })
+                infoCol.addView(TextView(this).apply {
+                    text = if (unlocked) "UNLOCKED - 15 Snakes Unique" else "LOCK ${cost} Coin"
+                    setTextColor(if (unlocked) Color.parseColor("#00ff88") else Color.parseColor("#ff4444"))
+                    textSize = 9f
+                })
+                card.addView(infoCol)
+
+                val actionBtn = Button(this).apply {
+                    text = if (unlocked) "PLAY" else "UNLOCK $cost"
+                    setTextColor(if (unlocked) Color.BLACK else Color.WHITE)
+                    textSize = 10f
+                    typeface = Typeface.DEFAULT_BOLD
+                    setPadding(dp(12), dp(6), dp(12), dp(6))
+                    background = makeBoxDrawable(
+                        if (unlocked) "#ffeb3b" else "#444444",
+                        if (unlocked) "#ffeb3b" else "#444444",
+                        18f,
+                        0
+                    )
+                    setOnClickListener {
+                        if (unlocked) {
+                            currentLevel = lv
+                            prefs.edit().putInt("curLv", currentLevel).apply()
+                            syncAllUi()
+                            closePanel()
+                            gameView.startNewMatch(autoBegin = true)
+                        } else if (coins >= cost) {
+                            updateCoins(coins - cost)
+                            prefs.edit()
+                                .putBoolean("lvUnlock_$lv", true)
+                                .putInt("curLv", lv)
+                                .apply()
+                            currentLevel = lv
+                            syncAllUi()
+                            closePanel()
+                            gameView.startNewMatch(autoBegin = true)
+                        } else {
+                            showSimpleDialog("Not Enough Coins", "Need $cost Coins. You have $coins Coins.")
+                        }
+                    }
+                }
+                card.addView(actionBtn)
+                body.addView(card)
+            }
+        }
     }
 
-    private fun toggleLeftDrawer() {
-        val nextVis = if (leftDrawer.visibility == View.VISIBLE) View.GONE else View.VISIBLE
-        leftDrawer.visibility = nextVis
-        rightDrawer.visibility = nextVis
+    private fun openSpinWheelPanel() {
+        gameView.pauseMatch()
+        showPanel(title = "SPIN WHEEL - Reward 1500/2000/3000 Coins") { body ->
+            val wrap = LinearLayout(this).apply {
+                layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+                orientation = LinearLayout.VERTICAL
+                gravity = Gravity.CENTER_HORIZONTAL
+                setPadding(dp(12), dp(18), dp(12), dp(18))
+            }
+
+            val wheelView = object : View(this) {
+                var angleDeg = 0f
+                private val slicePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
+                private val labelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    textAlign = Paint.Align.CENTER
+                    typeface = Typeface.DEFAULT_BOLD
+                }
+                private val colors = listOf(
+                    Color.CYAN,
+                    Color.MAGENTA,
+                    Color.WHITE,
+                    Color.YELLOW,
+                    Color.parseColor("#00ff88"),
+                    Color.parseColor("#ff9900")
+                )
+                private val labels = listOf("1500", "2000", "3000", "1500", "2000", "3000")
+
+                override fun onDraw(canvas: Canvas) {
+                    super.onDraw(canvas)
+                    val cx = width * 0.5f
+                    val cy = height * 0.5f
+                    val radius = minOf(width, height) * 0.45f
+
+                    canvas.save()
+                    canvas.rotate(angleDeg, cx, cy)
+                    for (i in 0 until 6) {
+                        slicePaint.color = colors[i]
+                        canvas.drawArc(
+                            cx - radius, cy - radius, cx + radius, cy + radius,
+                            i * 60f, 60f, true, slicePaint
+                        )
+                        val midRad = Math.toRadians((i * 60 + 30).toDouble())
+                        val lx = cx + (Math.cos(midRad) * radius * 0.62f).toFloat()
+                        val ly = cy + (Math.sin(midRad) * radius * 0.62f).toFloat()
+                        labelPaint.color = Color.BLACK
+                        labelPaint.textSize = 24f
+                        canvas.drawText(labels[i], lx, ly + 8f, labelPaint)
+                    }
+                    canvas.restore()
+
+                    slicePaint.color = Color.BLACK
+                    canvas.drawCircle(cx, cy, radius * 0.22f, slicePaint)
+                    labelPaint.color = Color.CYAN
+                    labelPaint.textSize = 22f
+                    canvas.drawText("SGS", cx, cy + 7f, labelPaint)
+                }
+            }.apply {
+                layoutParams = LinearLayout.LayoutParams(dp(200), dp(200)).apply {
+                    bottomMargin = dp(16)
+                }
+            }
+            wrap.addView(wheelView)
+
+            val resultText = TextView(this).apply {
+                text = "Current Coins: $coins"
+                setTextColor(Color.parseColor("#00ff88"))
+                textSize = 13f
+                typeface = Typeface.DEFAULT_BOLD
+                setPadding(0, 0, 0, dp(12))
+            }
+            wrap.addView(resultText)
+
+            val spinBtn = Button(this).apply {
+                text = "SPIN WHEEL (+1500 / 2000 / 3000)"
+                setTextColor(Color.BLACK)
+                textSize = 11f
+                typeface = Typeface.DEFAULT_BOLD
+                setPadding(dp(20), dp(10), dp(20), dp(10))
+                background = GradientDrawable(
+                    GradientDrawable.Orientation.LEFT_RIGHT,
+                    intArrayOf(Color.CYAN, Color.MAGENTA)
+                ).apply { cornerRadius = dp(24).toFloat() }
+            }
+
+            spinBtn.setOnClickListener {
+                spinBtn.isEnabled = false
+                resultText.text = "Spinning..."
+                adManager.showSpinRewardedAd(
+                    onRewardGranted = {
+                        val reward = GameData.spinRewards[Random.nextInt(GameData.spinRewards.size)]
+                        val startAngle = wheelView.angleDeg % 360f
+                        val targetAngle = startAngle + 1440f + Random.nextInt(360).toFloat()
+                        wheelAnimator?.cancel()
+                        wheelAnimator = ValueAnimator.ofFloat(startAngle, targetAngle).apply {
+                            duration = 2200L
+                            interpolator = DecelerateInterpolator()
+                            addUpdateListener { anim ->
+                                wheelView.angleDeg = anim.animatedValue as Float
+                                wheelView.invalidate()
+                            }
+                            addListener(object : android.animation.AnimatorListenerAdapter() {
+                                override fun onAnimationEnd(animation: android.animation.Animator) {
+                                    updateCoins(coins + reward)
+                                    resultText.text = "Won +$reward Coins! Total: $coins"
+                                    spinBtn.isEnabled = true
+                                }
+                            })
+                            start()
+                        }
+                    }
+                )
+            }
+            wrap.addView(spinBtn)
+            body.addView(wrap)
+        }
     }
 
-    private fun toggleRightDrawer() {
-        toggleLeftDrawer()
+    private fun openShopPanel(activeTab: Int) {
+        gameView.pauseMatch()
+        showPanel(title = "SHOP UNIQUE - 4 Types") { body ->
+            val tabBar = HorizontalScrollView(this).apply {
+                layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                    bottomMargin = dp(10)
+                }
+            }
+            val tabRow = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+            }
+            val tabNames = listOf("Food Shape", "Body Pattern", "Full Compact", "Head Char")
+            tabNames.forEachIndexed { index, label ->
+                val selected = index == activeTab
+                tabRow.addView(Button(this).apply {
+                    layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(34)).apply {
+                        rightMargin = dp(6)
+                    }
+                    text = label
+                    textSize = 10f
+                    typeface = Typeface.DEFAULT_BOLD
+                    setTextColor(if (selected) Color.BLACK else Color.WHITE)
+                    setPadding(dp(12), 0, dp(12), 0)
+                    background = makeBoxDrawable(
+                        if (selected) "#00ffff" else "#111111",
+                        if (selected) "#00ffff" else "#333333",
+                        18f,
+                        1
+                    )
+                    setOnClickListener { openShopPanel(index) }
+                })
+            }
+            tabBar.addView(tabRow)
+            body.addView(tabBar)
+
+            when (activeTab) {
+                0 -> GameData.foodItems.forEachIndexed { idx, item ->
+                    val unlocked = isItemUnlocked("fP", idx) || idx == 0
+                    val equipped = selectedFood == idx
+                    body.addView(makeShopRow(
+                        title = "${item.name} - ${item.shape} - ${item.price} Coin",
+                        colorHex = item.colorHex,
+                        unlocked = unlocked,
+                        equipped = equipped,
+                        price = item.price
+                    ) {
+                        if (unlocked) {
+                            selectedFood = idx
+                            prefs.edit().putInt("sel_food", idx).apply()
+                            syncAllUi()
+                            openShopPanel(0)
+                        } else if (coins >= item.price) {
+                            updateCoins(coins - item.price)
+                            unlockItem("fP", idx)
+                            selectedFood = idx
+                            prefs.edit().putInt("sel_food", idx).apply()
+                            syncAllUi()
+                            openShopPanel(0)
+                        } else {
+                            showSimpleDialog("Not Enough Coins", "Need ${item.price} Coins. You have $coins Coins.")
+                        }
+                    })
+                }
+
+                1 -> GameData.bodyItems.forEachIndexed { idx, item ->
+                    val unlocked = isItemUnlocked("bP", idx) || idx == 0
+                    val equipped = selectedBody == idx
+                    body.addView(makeShopRow(
+                        title = "${item.name} - ${item.pattern} - ${item.price} Coin",
+                        colorHex = item.colorHex,
+                        unlocked = unlocked,
+                        equipped = equipped,
+                        price = item.price
+                    ) {
+                        if (unlocked) {
+                            selectedBody = idx
+                            prefs.edit().putInt("sel_body", idx).apply()
+                            syncAllUi()
+                            openShopPanel(1)
+                        } else if (coins >= item.price) {
+                            updateCoins(coins - item.price)
+                            unlockItem("bP", idx)
+                            selectedBody = idx
+                            prefs.edit().putInt("sel_body", idx).apply()
+                            syncAllUi()
+                            openShopPanel(1)
+                        } else {
+                            showSimpleDialog("Not Enough Coins", "Need ${item.price} Coins. You have $coins Coins.")
+                        }
+                    })
+                }
+
+                2 -> GameData.fullBodies.forEachIndexed { idx, item ->
+                    val unlocked = isItemUnlocked("fbP", idx) || idx == 0
+                    val equipped = selectedFull == idx
+                    body.addView(makeShopRow(
+                        title = "${item.name} - ${item.pattern} - ${item.price} Coin",
+                        colorHex = item.dotHex,
+                        unlocked = unlocked,
+                        equipped = equipped,
+                        price = item.price
+                    ) {
+                        if (unlocked) {
+                            selectedFull = idx
+                            prefs.edit().putInt("sel_full", idx).apply()
+                            syncAllUi()
+                            openShopPanel(2)
+                        } else if (coins >= item.price) {
+                            updateCoins(coins - item.price)
+                            unlockItem("fbP", idx)
+                            selectedFull = idx
+                            prefs.edit().putInt("sel_full", idx).apply()
+                            syncAllUi()
+                            openShopPanel(2)
+                        } else {
+                            showSimpleDialog("Not Enough Coins", "Need ${item.price} Coins. You have $coins Coins.")
+                        }
+                    })
+                }
+
+                else -> GameData.heads.forEachIndexed { idx, item ->
+                    val unlocked = isItemUnlocked("hP", idx) || idx == 0
+                    val equipped = selectedHead == idx
+                    body.addView(makeShopRow(
+                        title = "Head ${item.name} ${item.emoji} - ${item.price} Coin",
+                        colorHex = item.colorHex,
+                        unlocked = unlocked,
+                        equipped = equipped,
+                        price = item.price
+                    ) {
+                        if (unlocked) {
+                            selectedHead = idx
+                            prefs.edit().putInt("sel_head", idx).apply()
+                            syncAllUi()
+                            openShopPanel(3)
+                        } else if (coins >= item.price) {
+                            updateCoins(coins - item.price)
+                            unlockItem("hP", idx)
+                            selectedHead = idx
+                            prefs.edit().putInt("sel_head", idx).apply()
+                            syncAllUi()
+                            openShopPanel(3)
+                        } else {
+                            showSimpleDialog("Not Enough Coins", "Need ${item.price} Coins. You have $coins Coins.")
+                        }
+                    })
+                }
+            }
+        }
     }
 
-    private fun closeDrawers() {
-        leftDrawer.visibility = View.GONE
-        rightDrawer.visibility = View.GONE
+    private fun openProfilePanel() {
+        gameView.pauseMatch()
+        showPanel(title = "PLAYER PROFILE & SGS ID") { body ->
+            body.addView(makeInfoCard(
+                title = "SGS PLAYER ID: $playerId",
+                lines = listOf(
+                    "Current Level: Lv $currentLevel / 15",
+                    "Coins: $coins | High Score: $highScore",
+                    "Status: Secure ID - Locked & Protected"
+                ),
+                borderHex = "#00ffff",
+                titleHex = "#00ffff"
+            ))
+        }
+    }
+
+    private fun showPanel(title: String, populate: (LinearLayout) -> Unit) {
+        panelContainer.removeAllViews()
+        panelContainer.visibility = View.VISIBLE
+
+        val sheet = LinearLayout(this).apply {
+            layoutParams = FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            )
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(Color.parseColor("#080810"))
+        }
+
+        val header = LinearLayout(this).apply {
+            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(12), dp(10), dp(12), dp(10))
+            setBackgroundColor(Color.BLACK)
+        }
+        header.addView(TextView(this).apply {
+            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+            text = title
+            setTextColor(Color.CYAN)
+            textSize = 12f
+            typeface = Typeface.DEFAULT_BOLD
+        })
+        header.addView(Button(this).apply {
+            layoutParams = LinearLayout.LayoutParams(dp(36), dp(36))
+            text = "X"
+            setTextColor(Color.BLACK)
+            textSize = 13f
+            typeface = Typeface.DEFAULT_BOLD
+            setPadding(0, 0, 0, 0)
+            background = makeBoxDrawable("#00ffff", "#ffffff", 18f, 2)
+            setOnClickListener { closePanel() }
+        })
+        sheet.addView(header)
+
+        val scroll = ScrollView(this).apply {
+            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f)
+            setPadding(dp(12), dp(10), dp(12), dp(16))
+        }
+        val contentCol = LinearLayout(this).apply {
+            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+            orientation = LinearLayout.VERTICAL
+        }
+        populate(contentCol)
+        scroll.addView(contentCol)
+        sheet.addView(scroll)
+
+        panelContainer.addView(sheet)
+    }
+
+    private fun closePanel() {
+        wheelAnimator?.cancel()
+        panelContainer.visibility = View.GONE
+        panelContainer.removeAllViews()
+        gameView.invalidate()
     }
 
     private fun toggleSound() {
         soundOn = !soundOn
-        prefs.edit().putString("soundOn", if (soundOn) "1" else "0").apply()
-        syncAllBars()
+        prefs.edit().putBoolean("soundOn", soundOn).apply()
+        gameView.configureSettings(soundOn, vibOn, trailOn)
+        syncAllUi()
     }
 
-    private fun toggleVib() {
-        vibOn = !vibOn
-        prefs.edit().putString("vibOn", if (vibOn) "1" else "0").apply()
+    private fun syncAllUi() {
+        val maxLv = highestUnlockedLevel()
+        playerIdText.text = "ID: $playerId"
+        unlockInfoText.text = "Unlock: Lv $maxLv/15 | Left: ${15 - maxLv}"
+        curLvBadgeText.text = "Lv $currentLevel"
+
+        coinTopText.text = "COIN $coins"
+        scoreLvTopText.text = "SC ${gameView.getCurrentScore()} | Lv $currentLevel"
+        speedTopText.text = "SPD ${gameView.getSpeedMs()}ms"
+        soundTopText.text = if (soundOn) "SOUND" else "MUTE"
+
+        gameView.configureSettings(soundOn, vibOn, trailOn)
+        gameView.applyTheme(currentLevel, selectedFood, selectedBody, selectedFull, selectedHead)
     }
 
-    private fun toggleTrail() {
-        trailOn = !trailOn
-        prefs.edit().putString("trailOn", if (trailOn) "1" else "0").apply()
-        gameView.applyTheme(curLv, trailOn, selFood, selBody, selFull, selHead)
-    }
-
-    private fun openProfileDialog() {
-        gameView.pauseForMenu()
-        dismissActiveDialog()
-        val box = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER
-            setBackgroundColor(Color.parseColor("#111111"))
-            setPadding(dp(18), dp(18), dp(18), dp(18))
-            addView(ImageView(this@MainActivity).apply {
-                setImageBitmap(createAvatarBitmap(dp(70)))
-            })
-            addView(TextView(this@MainActivity).apply {
-                text = "SGS PLAYER ID: $playerId"
-                setTextColor(Color.parseColor("#00FFFF"))
-                textSize = 12f
-                gravity = Gravity.CENTER
-                setTypeface(typeface, android.graphics.Typeface.BOLD)
-                setPadding(0, dp(10), 0, dp(4))
-            })
-            addView(TextView(this@MainActivity).apply {
-                text = "Secure ID - Locked & Protected"
-                setTextColor(Color.GRAY)
-                textSize = 9f
-                gravity = Gravity.CENTER
-            })
-        }
-        activeModalDialog = AlertDialog.Builder(this)
-            .setTitle("PLAYER PROFILE & SGS ID")
-            .setView(box)
-            .setPositiveButton("CLOSE") { d, _ -> d.dismiss() }
-            .show()
-    }
-
-    private fun openShopDialog() {
-        gameView.pauseForMenu()
-        dismissActiveDialog()
-
-        val listContainer = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(8), dp(8), dp(8), dp(8))
-        }
-
-        fun rebuildShopItems(tabIdx: Int) {
-            listContainer.removeAllViews()
-            when (tabIdx) {
-                0 -> GameData.foodItems.forEachIndexed { idx, it ->
-                    val unlocked = prefs.getString("fP_$idx", "0") == "1"
-                    val isSelected = selFood == idx
-                    listContainer.addView(shopRow(it.nWithDesc(), it.colorHex, it.price, unlocked, isSelected) {
-                        buyShopItem("fP_$idx", it.price) {
-                            selFood = idx
-                            gameView.applyTheme(curLv, trailOn, selFood, selBody, selFull, selHead)
-                            rebuildShopItems(0)
-                        }
-                    })
-                }
-                1 -> GameData.bodyItems.forEachIndexed { idx, it ->
-                    val unlocked = prefs.getString("bP_$idx", "0") == "1"
-                    val isSelected = selBody == idx
-                    listContainer.addView(shopRow(it.nWithDesc(), it.colorHex, it.price, unlocked, isSelected) {
-                        buyShopItem("bP_$idx", it.price) {
-                            selBody = idx
-                            gameView.applyTheme(curLv, trailOn, selFood, selBody, selFull, selHead)
-                            rebuildShopItems(1)
-                        }
-                    })
-                }
-                2 -> GameData.fullBodies.forEachIndexed { idx, it ->
-                    val unlocked = prefs.getString("fbP_$idx", "0") == "1"
-                    val isSelected = selFull == idx
-                    listContainer.addView(shopRow(it.nWithDesc(), it.dotHex, it.price, unlocked, isSelected) {
-                        buyShopItem("fbP_$idx", it.price) {
-                            selFull = idx
-                            gameView.applyTheme(curLv, trailOn, selFood, selBody, selFull, selHead)
-                            rebuildShopItems(2)
-                        }
-                    })
-                }
-                else -> GameData.heads.forEachIndexed { idx, it ->
-                    val unlocked = prefs.getString("hP_$idx", "0") == "1"
-                    val isSelected = selHead == idx
-                    listContainer.addView(shopRow(it.nWithDesc(), it.colorHex, it.price, unlocked, isSelected) {
-                        buyShopItem("hP_$idx", it.price) {
-                            selHead = idx
-                            gameView.applyTheme(curLv, trailOn, selFood, selBody, selFull, selHead)
-                            rebuildShopItems(3)
-                        }
-                    })
-                }
-            }
-        }
-
-        val rootShop = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setBackgroundColor(Color.parseColor("#0A0A12"))
-        }
-        val tabBar = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            setPadding(dp(6), dp(6), dp(6), dp(4))
-        }
-        val tabNames = listOf("Food", "Body", "Full", "Head")
-        tabNames.forEachIndexed { i, title ->
-            tabBar.addView(Button(this).apply {
-                text = title
-                textSize = 9f
-                isAllCaps = false
-                setOnClickListener { rebuildShopItems(i) }
-            }, LinearLayout.LayoutParams(0, dp(36), 1f).apply { marginEnd = dp(4) })
-        }
-        rootShop.addView(tabBar)
-        rootShop.addView(ScrollView(this).apply { addView(listContainer) }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(360)))
-
-        rebuildShopItems(0)
-        activeModalDialog = AlertDialog.Builder(this)
-            .setTitle("SHOP UNIQUE - ${GameData.GAME_NAME}")
-            .setView(rootShop)
-            .setPositiveButton("CLOSE") { d, _ -> d.dismiss() }
-            .show()
-    }
-
-    private fun shopRow(
-        title: String,
-        dotHex: String,
-        price: Int,
-        unlocked: Boolean,
-        selected: Boolean,
-        onAction: () -> Unit
-    ): LinearLayout {
-        return LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(8), dp(8), dp(8), dp(8))
-            background = GradientDrawable().apply {
-                setColor(Color.parseColor("#15151F"))
-                cornerRadius = dp(10).toFloat()
-                setStroke(dp(1), Color.parseColor("#333344"))
-            }
-            addView(View(this@MainActivity).apply {
-                background = GradientDrawable().apply {
-                    shape = GradientDrawable.OVAL
-                    setColor(Color.parseColor(dotHex))
-                    setStroke(dp(2), Color.WHITE)
-                }
-            }, LinearLayout.LayoutParams(dp(12), dp(12)).apply { marginEnd = dp(8) })
-
-            addView(TextView(this@MainActivity).apply {
-                text = title
-                setTextColor(Color.WHITE)
-                textSize = 10f
-            }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-
-            addView(Button(this@MainActivity).apply {
-                text = when {
-                    selected -> "USING"
-                    unlocked -> "USE"
-                    else -> "$price COIN"
-                }
-                textSize = 9f
-                isAllCaps = false
-                setOnClickListener { onAction() }
-            }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dp(34)))
-        }.also {
-            it.layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
-                bottomMargin = dp(6)
-            }
-        }
-    }
-
-    private fun buyShopItem(prefKey: String, price: Int, onSuccess: () -> Unit) {
-        if (prefs.getString(prefKey, "0") == "1") {
-            onSuccess()
-            return
-        }
-        if (coins >= price) {
-            saveCoins(coins - price)
-            prefs.edit().putString(prefKey, "1").apply()
-            adManager.syncFirebaseUser(
-                prefs.getString("uid", "guest_$playerId") ?: "guest_$playerId",
-                coins,
-                curLv,
-                highScore
-            )
-            onSuccess()
-        } else {
-            Toast.makeText(this, "Need $price Coin - Have $coins - Spin for Coins", Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    private fun openLevelsDialog() {
-        gameView.pauseForMenu()
-        dismissActiveDialog()
-        val labels = (1..15).map { lv ->
-            val cfg = GameData.safeLevel(lv)
-            val cost = GameData.levelCosts[lv - 1]
-            val unlocked = isLevelUnlocked(lv)
-            val status = if (unlocked) "UNLOCKED" else "LOCK ${cost} Coin"
-            "Lv$lv ${GameData.fullBodies[cfg.full].name} [$status]"
-        }.toTypedArray()
-
-        activeModalDialog = AlertDialog.Builder(this)
-            .setTitle("LEVELS - 15 Levels 15 Snakes")
-            .setItems(labels) { _, which ->
-                val targetLv = which + 1
-                if (isLevelUnlocked(targetLv)) {
-                    curLv = targetLv
-                    applyLevelTheme(syncFromLevel = true)
-                    syncAllBars()
-                } else {
-                    val cost = GameData.levelCosts[which]
-                    if (coins >= cost) {
-                        saveCoins(coins - cost)
-                        prefs.edit().putString("lvUnlock_$targetLv", "1").putInt("curLv", targetLv).apply()
-                        curLv = targetLv
-                        applyLevelTheme(syncFromLevel = true)
-                        syncAllBars()
-                        adManager.syncFirebaseUser(
-                            prefs.getString("uid", "guest_$playerId") ?: "guest_$playerId",
-                            coins,
-                            curLv,
-                            highScore
-                        )
-                        Toast.makeText(this, "Level $targetLv Unlocked!", Toast.LENGTH_SHORT).show()
-                    } else {
-                        Toast.makeText(this, "Need $cost Coins - You have $coins", Toast.LENGTH_SHORT).show()
-                    }
-                }
-            }
-            .setNegativeButton("CLOSE", null)
-            .show()
-    }
-
-    private fun openSpinDialog() {
-        gameView.pauseForMenu()
-        dismissActiveDialog()
-
-        val box = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER
-            setBackgroundColor(Color.parseColor("#111111"))
-            setPadding(dp(16), dp(16), dp(16), dp(16))
-        }
-        val adHost = FrameLayout(this).apply {
-            setBackgroundColor(Color.parseColor("#161622"))
-        }
-        box.addView(adHost, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(56)).apply { bottomMargin = dp(10) })
-        adManager.loadRewardedSpinAd(adHost)
-
-        val statusTv = TextView(this).apply {
-            text = "Spin rewards: +1500 / +2000 / +3000 Coins"
-            setTextColor(Color.parseColor("#00FF88"))
-            textSize = 11f
-            gravity = Gravity.CENTER
-            setTypeface(typeface, android.graphics.Typeface.BOLD)
-        }
-        box.addView(statusTv)
-
-        activeModalDialog = AlertDialog.Builder(this)
-            .setTitle("SPIN WHEEL - ${GameData.GAME_NAME}")
-            .setView(box)
-            .setPositiveButton("SPIN (+1500/3000)") { _, _ ->
-                val reward = GameData.spinRewards[Random.nextInt(GameData.spinRewards.size)]
-                saveCoins(coins + reward)
-                adManager.syncFirebaseUser(
-                    prefs.getString("uid", "guest_$playerId") ?: "guest_$playerId",
-                    coins,
-                    curLv,
-                    highScore
-                )
-                Toast.makeText(this, "Won $reward Coins! - ${GameData.GAME_NAME}", Toast.LENGTH_SHORT).show()
-            }
-            .setNegativeButton("CLOSE", null)
-            .show()
-    }
-
-    private fun openSettingsDialog() {
-        gameView.pauseForMenu()
-        dismissActiveDialog()
-
-        val container = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setBackgroundColor(Color.parseColor("#0E0E16"))
-            setPadding(dp(12), dp(12), dp(12), dp(12))
-        }
-
-        container.addView(TextView(this).apply {
-            text = "ID: $playerId | Lv: $curLv | Coin: $coins\nStudio: ${GameData.STUDIO} | Dev: ${GameData.DEVELOPER}\nPrivacy: Coins & scores stored via local & Firebase Cloud."
-            setTextColor(Color.parseColor("#CCCCCC"))
-            textSize = 10f
-            setPadding(0, 0, 0, dp(10))
-        })
-
-        container.addView(Button(this).apply {
-            text = "RATE US (+${GameData.RATE_BONUS_COINS} Coins)"
-            isAllCaps = false
-            setOnClickListener {
-                try {
-                    startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.uptodown.com/")))
-                } catch (_: Exception) {
-                }
-                if (prefs.getString("rated", "0") != "1") {
-                    prefs.edit().putString("rated", "1").apply()
-                    saveCoins(coins + GameData.RATE_BONUS_COINS)
-                    Toast.makeText(this@MainActivity, "+${GameData.RATE_BONUS_COINS} Bonus Coins Added!", Toast.LENGTH_SHORT).show()
-                }
-            }
-        })
-
-        container.addView(Button(this).apply {
-            text = "Sound: ${if (soundOn) "ON" else "OFF"}"
-            isAllCaps = false
-            setOnClickListener {
-                toggleSound()
-                text = "Sound: ${if (soundOn) "ON" else "OFF"}"
-            }
-        })
-
-        container.addView(Button(this).apply {
-            text = "Vibration: ${if (vibOn) "ON" else "OFF"}"
-            isAllCaps = false
-            setOnClickListener {
-                toggleVib()
-                text = "Vibration: ${if (vibOn) "ON" else "OFF"}"
-            }
-        })
-
-        container.addView(Button(this).apply {
-            text = "Trail Effect: ${if (trailOn) "ON" else "OFF"}"
-            isAllCaps = false
-            setOnClickListener {
-                toggleTrail()
-                text = "Trail Effect: ${if (trailOn) "ON" else "OFF"}"
-            }
-        })
-
-        container.addView(Button(this).apply {
-            text = "SECURE RESET (Score Only)"
-            isAllCaps = false
-            setOnClickListener {
-                prefs.edit().putInt("h", 0).apply()
-                highScore = 0
-                gameView.configure(curLv, coins, highScore, trailOn, selFood, selBody, selFull, selHead)
-                Toast.makeText(this@MainActivity, "Score Reset Successfully!", Toast.LENGTH_SHORT).show()
-            }
-        })
-
-        activeModalDialog = AlertDialog.Builder(this)
-            .setTitle("SETTINGS & PRIVACY POLICY")
-            .setView(ScrollView(this).apply { addView(container) })
-            .setPositiveButton("CLOSE", null)
-            .show()
-    }
-
-    private fun exitGame() {
-        dismissActiveDialog()
+    private fun showSimpleDialog(title: String, message: String) {
         AlertDialog.Builder(this)
-            .setTitle("SGS CONFIRM")
-            .setMessage("Exit ${GameData.GAME_NAME}? Your Progress is Safe! ID: $playerId")
-            .setPositiveButton("YES") { _, _ ->
-                adManager.syncFirebaseUser(
-                    prefs.getString("uid", "guest_$playerId") ?: "guest_$playerId",
-                    coins,
-                    curLv,
-                    highScore
-                )
-                finishAffinity()
-            }
-            .setNegativeButton("NO", null)
+            .setTitle(title)
+            .setMessage(message)
+            .setPositiveButton("OK", null)
             .show()
     }
 
-    private fun handleSystemBack() {
-        if (leftDrawer.visibility == View.VISIBLE || rightDrawer.visibility == View.VISIBLE) {
-            closeDrawers()
+    @Deprecated("Deprecated in Java")
+    override fun onBackPressed() {
+        if (panelContainer.visibility == View.VISIBLE) {
+            closePanel()
             return
         }
-        activeModalDialog?.let {
-            if (it.isShowing) {
-                it.dismiss()
-                activeModalDialog = null
-                return
-            }
+        if (drawerLayout.isDrawerOpen(GravityCompat.START) || drawerLayout.isDrawerOpen(GravityCompat.END)) {
+            drawerLayout.closeDrawers()
+            return
         }
-        backPressCount += 1
-        if (backPressCount == 1) {
-            Toast.makeText(this, "Press Back Again To Exit SGS - ID Safe", Toast.LENGTH_SHORT).show()
-            uiHandler.postDelayed({ backPressCount = 0 }, 2000L)
-        } else {
-            backPressCount = 0
-            exitGame()
-        }
+        showExitConfirmDialog()
     }
-
-    private fun dismissActiveDialog() {
-        activeModalDialog?.dismiss()
-        activeModalDialog = null
-    }
-
-    private fun createAvatarBitmap(px: Int): android.graphics.Bitmap {
-        val safePx = px.coerceAtLeast(24)
-        val bmp = android.graphics.Bitmap.createBitmap(safePx, safePx, android.graphics.Bitmap.Config.ARGB_8888)
-        val c = Canvas(bmp)
-        val p = Paint(Paint.ANTI_ALIAS_FLAG)
-        p.color = Color.parseColor("#0A0A1A")
-        c.drawRect(0f, 0f, safePx.toFloat(), safePx.toFloat(), p)
-        p.color = Color.parseColor("#00FFFF")
-        c.drawCircle(safePx / 2f, safePx / 2f, safePx / 3f, p)
-        p.color = Color.BLACK
-        p.textSize = (safePx * 0.36f).coerceAtLeast(10f)
-        p.textAlign = Paint.Align.CENTER
-        p.isFakeBoldText = true
-        c.drawText("SGS", safePx / 2f, safePx / 2f + (p.textSize * 0.35f), p)
-        return bmp
-    }
-
-    private fun GameData.FoodItem.nWithDesc(): String = "$name - $shape - $price Coin"
-    private fun GameData.BodyItem.nWithDesc(): String = "$name - $pattern - $price Coin"
-    private fun GameData.FullBodyItem.nWithDesc(): String = "$name - $pattern - ${size}px - $price Coin"
-    private fun GameData.HeadItem.nWithDesc(): String = "Head $name $symbol - $price Coin"
-
-    private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
 
     override fun onPause() {
         super.onPause()
-        gameView.pauseForMenu()
+        gameView.pauseMatch()
     }
 
     override fun onDestroy() {
         super.onDestroy()
-        uiHandler.removeCallbacksAndMessages(null)
+        wheelAnimator?.cancel()
+        loadingTimer?.let { uiHandler.removeCallbacks(it) }
+        gameView.stopLoop()
         adManager.destroy()
+    }
+
+    private fun makeControlButton(label: String, isOk: Boolean, onClick: () -> Unit): Button {
+        return Button(this).apply {
+            layoutParams = LinearLayout.LayoutParams(dp(64), dp(46))
+            text = label
+            textSize = if (isOk) 11f else 17f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(if (isOk) Color.BLACK else Color.CYAN)
+            setPadding(0, 0, 0, 0)
+            background = makeBoxDrawable(
+                if (isOk) "#00ffff" else "#15151f",
+                if (isOk) "#00ffff" else "#6600ffff",
+                14f,
+                2
+            )
+            setOnClickListener { onClick() }
+        }
+    }
+
+    private fun makeSmallActionBtn(label: String, onClick: () -> Unit): Button {
+        return Button(this).apply {
+            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(28))
+            text = label
+            textSize = 9f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(Color.CYAN)
+            setPadding(dp(10), 0, dp(10), 0)
+            background = makeBoxDrawable("#15151f", "#6600ffff", 8f, 1)
+            setOnClickListener { onClick() }
+        }
+    }
+
+    private fun makeDrawerBtn(label: String, bgHex: String, textHex: String, onClick: () -> Unit): Button {
+        return Button(this).apply {
+            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(40)).apply {
+                bottomMargin = dp(8)
+            }
+            text = label
+            textSize = 10f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(Color.parseColor(textHex))
+            background = makeBoxDrawable(bgHex, "#4400ffff", 9f, 1)
+            setOnClickListener { onClick() }
+        }
+    }
+
+    private fun makeToggleRow(label: String, enabled: Boolean, onClick: () -> Unit): LinearLayout {
+        return LinearLayout(this).apply {
+            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                bottomMargin = dp(8)
+            }
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(12), dp(10), dp(12), dp(10))
+            background = makeBoxDrawable("#111111", "#222222", 10f, 1)
+
+            addView(TextView(this@MainActivity).apply {
+                layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+                text = label
+                setTextColor(Color.WHITE)
+                textSize = 11f
+            })
+            addView(Button(this@MainActivity).apply {
+                text = if (enabled) "ON" else "OFF"
+                setTextColor(if (enabled) Color.BLACK else Color.WHITE)
+                textSize = 10f
+                typeface = Typeface.DEFAULT_BOLD
+                setPadding(dp(14), dp(6), dp(14), dp(6))
+                background = makeBoxDrawable(
+                    if (enabled) "#ffeb3b" else "#444444",
+                    if (enabled) "#ffeb3b" else "#444444",
+                    18f,
+                    0
+                )
+                setOnClickListener { onClick() }
+            })
+        }
+    }
+
+    private fun makeShopRow(
+        title: String,
+        colorHex: String,
+        unlocked: Boolean,
+        equipped: Boolean,
+        price: Int,
+        onClick: () -> Unit
+    ): LinearLayout {
+        return LinearLayout(this).apply {
+            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                bottomMargin = dp(7)
+            }
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(10), dp(9), dp(10), dp(9))
+            background = GradientDrawable(
+                GradientDrawable.Orientation.TL_BR,
+                intArrayOf(Color.parseColor("#15151f"), Color.parseColor("#1a1a2e"))
+            ).apply {
+                cornerRadius = dp(12).toFloat()
+                setStroke(dp(1), Color.parseColor(if (equipped) "#00ff88" else "#222222"))
+            }
+
+            val dot = View(this@MainActivity).apply {
+                layoutParams = LinearLayout.LayoutParams(dp(12), dp(12)).apply {
+                    rightMargin = dp(8)
+                }
+                background = makeBoxDrawable(colorHex, "#ffffff", 6f, 1)
+            }
+            addView(dot)
+
+            addView(TextView(this@MainActivity).apply {
+                layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+                text = title
+                setTextColor(Color.WHITE)
+                textSize = 10f
+            })
+
+            val btnLabel = when {
+                equipped -> "EQUIPPED"
+                unlocked -> "USE"
+                else -> "$price COIN"
+            }
+            val btnBg = when {
+                equipped -> "#00ff88"
+                unlocked -> "#ffeb3b"
+                else -> "#00ffff"
+            }
+
+            addView(Button(this@MainActivity).apply {
+                text = btnLabel
+                setTextColor(Color.BLACK)
+                textSize = 10f
+                typeface = Typeface.DEFAULT_BOLD
+                setPadding(dp(12), dp(6), dp(12), dp(6))
+                background = makeBoxDrawable(btnBg, btnBg, 18f, 0)
+                setOnClickListener { onClick() }
+            })
+        }
+    }
+
+    private fun makeInfoCard(
+        title: String,
+        lines: List<String>,
+        borderHex: String,
+        titleHex: String
+    ): LinearLayout {
+        return LinearLayout(this).apply {
+            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                bottomMargin = dp(10)
+            }
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(12), dp(10), dp(12), dp(10))
+            background = makeBoxDrawable("#111111", borderHex, 12f, 2)
+
+            addView(TextView(this@MainActivity).apply {
+                text = title
+                setTextColor(Color.parseColor(titleHex))
+                textSize = 12f
+                typeface = Typeface.DEFAULT_BOLD
+                setPadding(0, 0, 0, dp(4))
+            })
+            lines.forEach { line ->
+                addView(TextView(this@MainActivity).apply {
+                    text = line
+                    setTextColor(Color.parseColor("#cccccc"))
+                    textSize = 10f
+                    setPadding(0, dp(2), 0, dp(2))
+                })
+            }
+        }
+    }
+
+    private fun makeBoxDrawable(fillHex: String, strokeHex: String, radiusDp: Float, strokeDp: Int): GradientDrawable {
+        return GradientDrawable().apply {
+            try {
+                setColor(Color.parseColor(fillHex))
+            } catch (_: Exception) {
+                setColor(Color.BLACK)
+            }
+            cornerRadius = dp(radiusDp.toInt()).toFloat()
+            if (strokeDp > 0) {
+                try {
+                    setStroke(dp(strokeDp), Color.parseColor(strokeHex))
+                } catch (_: Exception) {
+                    setStroke(dp(strokeDp), Color.CYAN)
+                }
+            }
+        }
+    }
+
+    private fun dp(value: Int): Int {
+        return (value * resources.displayMetrics.density).toInt()
     }
 }
