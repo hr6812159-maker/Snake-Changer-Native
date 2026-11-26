@@ -9,6 +9,7 @@ import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.webkit.WebChromeClient
+import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebSettings
 import android.webkit.WebView
@@ -34,16 +35,47 @@ class AdManager(private val activity: Activity) {
         val settings = webView.settings
         settings.javaScriptEnabled = true
         settings.domStorageEnabled = true
+        settings.databaseEnabled = true
         settings.loadWithOverviewMode = true
         settings.useWideViewPort = true
+        settings.mediaPlaybackRequiresUserGesture = false
         settings.mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
         settings.cacheMode = WebSettings.LOAD_DEFAULT
 
+        webView.setLayerType(View.LAYER_TYPE_HARDWARE, null)
         webView.setBackgroundColor(Color.parseColor("#111111"))
         webView.webChromeClient = WebChromeClient()
         webView.webViewClient = object : WebViewClient() {
             override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
                 return false
+            }
+
+            override fun onPageFinished(view: WebView?, url: String?) {
+                super.onPageFinished(view, url)
+                view?.evaluateJavascript(
+                    """
+                    (function() {
+                      var slot = document.getElementById('sgs-banner-slot');
+                      if (slot && !slot.getAttribute('data-injected')) {
+                        slot.setAttribute('data-injected', '1');
+                        var s = document.createElement('script');
+                        s.async = true;
+                        s.src = '${GameData.MONETAG_SCRIPT_SRC}';
+                        s.setAttribute('data-zone', '${GameData.BANNER_ZONE_ID}');
+                        slot.appendChild(s);
+                      }
+                    })();
+                    """.trimIndent(),
+                    null
+                )
+            }
+
+            override fun onReceivedError(
+                view: WebView?,
+                request: WebResourceRequest?,
+                error: WebResourceError?
+            ) {
+                super.onReceivedError(view, request, error)
             }
         }
 
@@ -51,6 +83,7 @@ class AdManager(private val activity: Activity) {
             <!DOCTYPE html>
             <html>
             <head>
+              <meta charset="UTF-8">
               <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
               <meta name="monetag" content="${GameData.MONETAG_META_TAG}">
               <style>
@@ -58,6 +91,7 @@ class AdManager(private val activity: Activity) {
                 html, body {
                   width: 100%;
                   height: 100%;
+                  min-height: 50px;
                   background: #111111;
                   color: #00ffff;
                   font-family: sans-serif;
@@ -66,27 +100,29 @@ class AdManager(private val activity: Activity) {
                   justify-content: center;
                   overflow: hidden;
                 }
-                .ad-wrap {
+                #sgs-banner-slot {
                   width: 100%;
-                  height: 100%;
+                  min-height: 50px;
                   display: flex;
                   align-items: center;
                   justify-content: center;
+                  position: relative;
+                }
+                .sgs-badge {
+                  position: absolute;
+                  bottom: 2px;
+                  right: 6px;
+                  font-size: 9px;
+                  color: rgba(0, 255, 255, 0.35);
+                  pointer-events: none;
                 }
               </style>
             </head>
             <body>
-              <div class="ad-wrap" id="sgs-banner-slot"></div>
-              <script>
-                (function() {
-                  var slot = document.getElementById('sgs-banner-slot');
-                  var s = document.createElement('script');
-                  s.async = true;
-                  s.src = '${GameData.MONETAG_SCRIPT_SRC}';
-                  s.setAttribute('data-zone', '${GameData.BANNER_ZONE_ID}');
-                  (slot || document.body).appendChild(s);
-                })();
-              </script>
+              <div id="sgs-banner-slot">
+                <script async src="${GameData.MONETAG_SCRIPT_SRC}" data-zone="${GameData.BANNER_ZONE_ID}"></script>
+                <span class="sgs-badge">SGS AD</span>
+              </div>
             </body>
             </html>
         """.trimIndent()
