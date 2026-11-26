@@ -1,288 +1,151 @@
 package com.sadiastudio.snakechanger
 
-import android.annotation.SuppressLint
-import android.app.Activity
+import android.content.Context
 import android.graphics.Color
 import android.os.Handler
 import android.os.Looper
-import android.view.Gravity
-import android.view.View
 import android.view.ViewGroup
-import android.webkit.WebChromeClient
-import android.webkit.WebResourceError
-import android.webkit.WebResourceRequest
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
-import android.widget.Button
 import android.widget.FrameLayout
-import android.widget.LinearLayout
-import android.widget.TextView
+import org.json.JSONObject
+import java.net.HttpURLConnection
+import java.net.URL
+import java.util.concurrent.Executors
 
-class AdManager(private val activity: Activity) {
+class AdManager(private val context: Context) {
 
-    private val handler = Handler(Looper.getMainLooper())
-    private var attachedBanner: WebView? = null
-    private var rewardModal: FrameLayout? = null
-    private var rewardTimerRunnable: Runnable? = null
-    private var isDestroyed = false
+    private val executor = Executors.newSingleThreadExecutor()
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private var bannerWebView: WebView? = null
+    private var rewardWebView: WebView? = null
 
-    @SuppressLint("SetJavaScriptEnabled")
-    fun attachBanner(webView: WebView) {
-        if (isDestroyed) return
-        attachedBanner = webView
+    fun attachBanner(container: ViewGroup) {
+        container.removeAllViews()
+        val wv = createConfiguredWebView()
+        bannerWebView = wv
 
-        val settings = webView.settings
-        settings.javaScriptEnabled = true
-        settings.domStorageEnabled = true
-        settings.databaseEnabled = true
-        settings.loadWithOverviewMode = true
-        settings.useWideViewPort = true
-        settings.mediaPlaybackRequiresUserGesture = false
-        settings.mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
-        settings.cacheMode = WebSettings.LOAD_DEFAULT
-
-        webView.setLayerType(View.LAYER_TYPE_HARDWARE, null)
-        webView.setBackgroundColor(Color.parseColor("#111111"))
-        webView.webChromeClient = WebChromeClient()
-        webView.webViewClient = object : WebViewClient() {
-            override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
-                return false
-            }
-
-            override fun onPageFinished(view: WebView?, url: String?) {
-                super.onPageFinished(view, url)
-                view?.evaluateJavascript(
-                    """
-                    (function() {
-                      var slot = document.getElementById('sgs-banner-slot');
-                      if (slot && !slot.getAttribute('data-injected')) {
-                        slot.setAttribute('data-injected', '1');
-                        var s = document.createElement('script');
-                        s.async = true;
-                        s.src = '${GameData.MONETAG_SCRIPT_SRC}';
-                        s.setAttribute('data-zone', '${GameData.BANNER_ZONE_ID}');
-                        slot.appendChild(s);
-                      }
-                    })();
-                    """.trimIndent(),
-                    null
-                )
-            }
-
-            override fun onReceivedError(
-                view: WebView?,
-                request: WebResourceRequest?,
-                error: WebResourceError?
-            ) {
-                super.onReceivedError(view, request, error)
-            }
-        }
+        val lp = FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT,
+            FrameLayout.LayoutParams.MATCH_PARENT
+        )
+        container.addView(wv, lp)
 
         val html = """
             <!DOCTYPE html>
             <html>
             <head>
               <meta charset="UTF-8">
-              <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-              <meta name="monetag" content="${GameData.MONETAG_META_TAG}">
+              <meta name="viewport" content="width=device-width,initial-scale=1">
+              <meta name="${GameData.MONETAG_META_TAG}" content="${GameData.MONETAG_META_TAG}">
               <style>
-                * { box-sizing: border-box; margin: 0; padding: 0; }
-                html, body {
-                  width: 100%;
-                  height: 100%;
-                  min-height: 50px;
-                  background: #111111;
-                  color: #00ffff;
-                  font-family: sans-serif;
-                  display: flex;
-                  align-items: center;
-                  justify-content: center;
-                  overflow: hidden;
-                }
-                #sgs-banner-slot {
-                  width: 100%;
-                  min-height: 50px;
-                  display: flex;
-                  align-items: center;
-                  justify-content: center;
-                  position: relative;
-                }
-                .sgs-badge {
-                  position: absolute;
-                  bottom: 2px;
-                  right: 6px;
-                  font-size: 9px;
-                  color: rgba(0, 255, 255, 0.35);
-                  pointer-events: none;
-                }
+                html,body{margin:0;padding:0;width:100%;height:100%;background:#111;overflow:hidden;display:flex;align-items:center;justify-content:center;}
               </style>
             </head>
             <body>
-              <div id="sgs-banner-slot">
-                <script async src="${GameData.MONETAG_SCRIPT_SRC}" data-zone="${GameData.BANNER_ZONE_ID}"></script>
-                <span class="sgs-badge">SGS AD</span>
-              </div>
+              <script>(function(s){s.dataset.zone='${GameData.BANNER_ZONE_ID}',s.src='${GameData.MONETAG_SCRIPT_SRC}'})([document.documentElement, document.body].filter(Boolean).pop().appendChild(document.createElement('script')))</script>
             </body>
             </html>
         """.trimIndent()
 
-        webView.loadDataWithBaseURL(
-            GameData.MONETAG_BASE_URL,
-            html,
-            "text/html",
-            "UTF-8",
-            null
-        )
+        wv.loadDataWithBaseURL(GameData.MONETAG_BASE_URL, html, "text/html", "UTF-8", null)
     }
 
-    // Rewarded Ad ONLY for Spin Wheel
-    fun showSpinRewardedAd(onRewardGranted: () -> Unit) {
-        if (isDestroyed || activity.isFinishing) {
-            onRewardGranted()
-            return
-        }
-
-        dismissRewardModal()
-
-        val rootGroup: ViewGroup? = activity.findViewById(android.R.id.content)
-        if (rootGroup == null) {
-            onRewardGranted()
-            return
-        }
-
-        val overlay = FrameLayout(activity).apply {
-            layoutParams = ViewGroup.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT
+    fun loadRewardedSpinAd(container: ViewGroup?) {
+        container ?: return
+        container.removeAllViews()
+        val wv = createConfiguredWebView()
+        rewardWebView = wv
+        container.addView(
+            wv,
+            FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT
             )
-            setBackgroundColor(Color.argb(230, 0, 0, 0))
-            isClickable = true
-            isFocusable = true
-            visibility = View.VISIBLE
-        }
+        )
+        val html = """
+            <!DOCTYPE html>
+            <html>
+            <head>
+              <meta charset="UTF-8">
+              <meta name="${GameData.MONETAG_META_TAG}" content="${GameData.MONETAG_META_TAG}">
+              <style>html,body{margin:0;padding:0;width:100%;height:100%;background:#161622;color:#ffeb3b;font-family:sans-serif;font-size:10px;display:flex;align-items:center;justify-content:center;text-align:center;}</style>
+            </head>
+            <body>
+              <div>Snake Changer Rewarded Ad<br>Zone ${GameData.SPIN_REWARD_ZONE_ID} Active</div>
+              <script>(function(s){s.dataset.zone='${GameData.SPIN_REWARD_ZONE_ID}',s.src='${GameData.SPIN_VIGNETTE_SRC}'})([document.documentElement, document.body].filter(Boolean).pop().appendChild(document.createElement('script')))</script>
+            </body>
+            </html>
+        """.trimIndent()
+        wv.loadDataWithBaseURL(GameData.MONETAG_BASE_URL, html, "text/html", "UTF-8", null)
+    }
 
-        val box = LinearLayout(activity).apply {
-            layoutParams = FrameLayout.LayoutParams(
-                dp(310),
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-                Gravity.CENTER
-            )
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER_HORIZONTAL
-            setPadding(dp(16), dp(16), dp(16), dp(16))
-            setBackgroundColor(Color.parseColor("#11111e"))
-        }
+    fun syncFirebaseUser(
+        uid: String,
+        coins: Int,
+        curLv: Int,
+        high: Int,
+        onRemoteLoaded: ((remoteCoins: Int?, remoteLv: Int?, remoteHigh: Int?) -> Unit)? = null
+    ) {
+        executor.execute {
+            try {
+                val docUrl = "https://firestore.googleapis.com/v1/projects/${GameData.FIREBASE_PROJECT_ID}/databases/(default)/documents/sgs_users/$uid"
+                val patchUrl = "$docUrl?updateMask.fieldPaths=coins&updateMask.fieldPaths=curLv&updateMask.fieldPaths=high"
+                val bodyJson = JSONObject().apply {
+                    put("fields", JSONObject().apply {
+                        put("coins", JSONObject().put("integerValue", coins.coerceAtLeast(0).toString()))
+                        put("curLv", JSONObject().put("stringValue", curLv.coerceIn(1, 15).toString()))
+                        put("high", JSONObject().put("integerValue", high.coerceAtLeast(0).toString()))
+                    })
+                }.toString()
 
-        val titleTv = TextView(activity).apply {
-            text = "SPIN WHEEL REWARD AD"
-            setTextColor(Color.CYAN)
-            textSize = 13f
-            setPadding(0, 0, 0, dp(6))
-        }
-        box.addView(titleTv)
+                val patchConn = (URL(patchUrl).openConnection() as HttpURLConnection).apply {
+                    requestMethod = "PATCH"
+                    setRequestProperty("Content-Type", "application/json")
+                    doOutput = true
+                    connectTimeout = 5000
+                    readTimeout = 5000
+                }
+                patchConn.outputStream.use { it.write(bodyJson.toByteArray(Charsets.UTF_8)) }
+                patchConn.responseCode
+                patchConn.disconnect()
 
-        val statusTv = TextView(activity).apply {
-            text = "Loading reward... 3s"
-            setTextColor(Color.parseColor("#00ff88"))
-            textSize = 11f
-            setPadding(0, 0, 0, dp(10))
-        }
-        box.addView(statusTv)
-
-        val adWeb = WebView(activity).apply {
-            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(120)).apply {
-                bottomMargin = dp(12)
+                val getConn = (URL(docUrl).openConnection() as HttpURLConnection).apply {
+                    requestMethod = "GET"
+                    connectTimeout = 5000
+                    readTimeout = 5000
+                }
+                if (getConn.responseCode == 200) {
+                    val raw = getConn.inputStream.bufferedReader().use { it.readText() }
+                    val fields = JSONObject(raw).optJSONObject("fields")
+                    val rCoins = fields?.optJSONObject("coins")?.optString("integerValue")?.toIntOrNull()
+                    val rLv = fields?.optJSONObject("curLv")?.optString("stringValue")?.toIntOrNull()
+                    val rHigh = fields?.optJSONObject("high")?.optString("integerValue")?.toIntOrNull()
+                    mainHandler.post { onRemoteLoaded?.invoke(rCoins, rLv, rHigh) }
+                }
+                getConn.disconnect()
+            } catch (_: Exception) {
             }
-            @SuppressLint("SetJavaScriptEnabled")
+        }
+    }
+
+    private fun createConfiguredWebView(): WebView {
+        return WebView(context).apply {
+            setBackgroundColor(Color.parseColor("#111111"))
             settings.javaScriptEnabled = true
             settings.domStorageEnabled = true
+            settings.mediaPlaybackRequiresUserGesture = false
             settings.mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
-            setBackgroundColor(Color.parseColor("#080810"))
-            loadDataWithBaseURL(
-                GameData.MONETAG_BASE_URL,
-                """
-                    <!DOCTYPE html>
-                    <html>
-                    <head>
-                      <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                      <meta name="monetag" content="${GameData.MONETAG_META_TAG}">
-                      <style>
-                        html, body { margin:0; padding:0; width:100%; height:100%; background:#080810; color:#00ff88; display:flex; align-items:center; justify-content:center; font-family:sans-serif; }
-                      </style>
-                    </head>
-                    <body>
-                      <div id="reward-slot">SGS Spin Reward Ready</div>
-                      <script async src="${GameData.MONETAG_SCRIPT_SRC}" data-zone="${GameData.SPIN_REWARD_ZONE_ID}"></script>
-                    </body>
-                    </html>
-                """.trimIndent(),
-                "text/html",
-                "UTF-8",
-                null
-            )
+            webViewClient = WebViewClient()
         }
-        box.addView(adWeb)
-
-        val claimBtn = Button(activity).apply {
-            text = "WAIT (3)"
-            isEnabled = false
-            setTextColor(Color.BLACK)
-            textSize = 11f
-            setPadding(dp(18), dp(8), dp(18), dp(8))
-            setBackgroundColor(Color.GRAY)
-            setOnClickListener {
-                dismissRewardModal()
-                onRewardGranted()
-            }
-        }
-        box.addView(claimBtn)
-        overlay.addView(box)
-        rootGroup.addView(overlay)
-        rewardModal = overlay
-
-        var secondsLeft = 3
-        val countdown = object : Runnable {
-            override fun run() {
-                if (isDestroyed || rewardModal == null) return
-                secondsLeft--
-                if (secondsLeft > 0) {
-                    statusTv.text = "Loading reward... ${secondsLeft}s"
-                    claimBtn.text = "WAIT ($secondsLeft)"
-                    rewardTimerRunnable = this
-                    handler.postDelayed(this, 1000L)
-                } else {
-                    statusTv.text = "Reward unlocked! Tap to claim spin."
-                    claimBtn.isEnabled = true
-                    claimBtn.text = "CLAIM SPIN REWARD"
-                    claimBtn.setBackgroundColor(Color.parseColor("#00ff88"))
-                }
-            }
-        }
-        rewardTimerRunnable = countdown
-        handler.postDelayed(countdown, 1000L)
-    }
-
-    private fun dismissRewardModal() {
-        rewardTimerRunnable?.let { handler.removeCallbacks(it) }
-        rewardTimerRunnable = null
-        rewardModal?.let { modal ->
-            (modal.parent as? ViewGroup)?.removeView(modal)
-        }
-        rewardModal = null
     }
 
     fun destroy() {
-        isDestroyed = true
-        dismissRewardModal()
-        attachedBanner?.apply {
-            stopLoading()
-            destroy()
-        }
-        attachedBanner = null
-    }
-
-    private fun dp(value: Int): Int {
-        return (value * activity.resources.displayMetrics.density).toInt()
+        bannerWebView?.destroy()
+        rewardWebView?.destroy()
+        bannerWebView = null
+        rewardWebView = null
+        executor.shutdownNow()
     }
 }
