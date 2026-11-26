@@ -1052,36 +1052,19 @@ class MainActivity : AppCompatActivity() {
                 refreshMenuContent()
 
                 val reward = GameData.spinCoinRewards.random()
-                adManager?.showRewardedSpin(
-                    onRewardEarned = {
-                        runOnUiThread {
-                            isSpinningAd = false
-                            coins += reward
-                            saveState()
-                            updateHud(
-                                score = gameView.getCurrentScore(),
-                                bestScore = gameView.getLevelBestScore(curLv),
-                                speedMs = gameView.getSpeedMs(),
-                                level = curLv
-                            )
-                            refreshMenuContent()
-                            showToast("Spin Won: +$reward Power Coins!")
-                        }
-                    },
-                    onAdFailedOrClosed = {
-                        runOnUiThread {
-                            isSpinningAd = false
-                            refreshMenuContent()
-                            showToast("Spin cancelled or ad unavailable")
-                        }
-                    }
-                ) ?: run {
+                uiHandler.postDelayed({
                     isSpinningAd = false
                     coins += reward
                     saveState()
+                    updateHud(
+                        score = gameView.getCurrentScore(),
+                        bestScore = gameView.getLevelBestScore(curLv),
+                        speedMs = gameView.getSpeedMs(),
+                        level = curLv
+                    )
                     refreshMenuContent()
                     showToast("Spin Won: +$reward Power Coins!")
-                }
+                }, 450L)
             }
         }
 
@@ -1160,7 +1143,6 @@ class MainActivity : AppCompatActivity() {
             ).apply {
                 bottomMargin = dp(8)
             }
-            layoutParams = lp
         }
 
         val title = TextView(this).apply {
@@ -1194,7 +1176,6 @@ class MainActivity : AppCompatActivity() {
             orientation = LinearLayout.VERTICAL
         }
 
-        // 24h Reminder ON / OFF toggle
         body.addView(
             makeToggleRow(
                 label = "24h Reminder Notification",
@@ -1262,7 +1243,6 @@ class MainActivity : AppCompatActivity() {
             )
         )
 
-        // Separate Model / Preset Options section inside Settings
         val modelSectionLabel = TextView(this).apply {
             text = "MODEL & PRESET OPTIONS"
             textSize = 11f
