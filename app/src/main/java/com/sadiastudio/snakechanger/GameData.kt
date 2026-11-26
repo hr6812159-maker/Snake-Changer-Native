@@ -4,150 +4,161 @@ import android.util.Base64
 
 object GameData {
 
-    const val GAME_NAME = "SNAKE CHANGER"
-    const val BRAND = "Snake Changer - SGS"
-    const val STUDIO = "Sadis Studio"
-    const val DEVELOPER = "Habibur Rahman"
     const val PACKAGE_NAME = "com.sadiastudio.snakechanger"
-    const val UPTODOWN_URL = "https://snake-changer-sgs.en.uptodown.com/android"
+    const val GAME_NAME = "Snake Changer"
+    const val BRAND = "SGS"
+    const val STUDIO = "Sadia Studio"
+    const val DEVELOPER = "Habibur Rahman"
+    const val VERSION_NAME = "1.0.0"
 
     const val MONETAG_BASE_URL = "https://hr6812159-maker.github.io"
-    const val MONETAG_META_TAG = "monetag"
+    const val MONETAG_META_TAG = "0f4b2c80eba77b6380a164a6194adf36"
     const val MONETAG_SCRIPT_SRC = "https://nap5k.com/tag.min.js"
     const val BANNER_ZONE_ID = "12205061"
     const val SPIN_REWARD_ZONE_ID = "12205081"
+    const val SPIN_VIGNETTE_SRC = "https://n6wxm.com/vignette.min.js"
 
-    const val START_COINS = 5
-    const val FOODS_PER_POWER_COIN = 10
-    const val POWER_COINS_PER_10_FOOD = 1
-    const val SPECIAL_COIN_REWARD = 2
-    const val RATE_BONUS_COINS = 15
+    const val FIREBASE_API_KEY = "AIzaSyCC2QLIC885rPjshBpJ_kuww7EgxLeg7dg"
+    const val FIREBASE_PROJECT_ID = "snake-changer-sgs"
+    const val FIREBASE_APP_ID = "1:1038782118935:web:d5341ecdbcec87f28fb052"
 
-    val spinCoinRewards = intArrayOf(15, 25, 40)
+    const val START_COINS = 500
+    const val FOOD_EARN = 50
+    const val SPECIAL_FOOD_EARN = 150
+    const val RATE_BONUS_COINS = 100
+
+    val spinRewards = intArrayOf(1500, 2000, 3000, 1500, 2000, 3000)
 
     val levelCosts = intArrayOf(
-        0,    // Lv 1 (Unlocked by default)
-        10,   // Lv 2
-        20,   // Lv 3
-        30,   // Lv 4
-        45,   // Lv 5
-        60,   // Lv 6
-        80,   // Lv 7
-        100,  // Lv 8
-        125,  // Lv 9
-        150,  // Lv 10
-        180,  // Lv 11
-        210,  // Lv 12
-        245,  // Lv 13
-        280,  // Lv 14
-        320   // Lv 15
+        0, 1500, 3000, 5000, 7000,
+        9000, 11000, 13000, 16000, 19000,
+        22000, 26000, 30000, 35000, 42000
     )
 
-    data class HeadItem(
-        val name: String,
-        val emoji: String,
-        val colorHex: String
-    )
-
-    data class BodyItem(
-        val name: String,
-        val colorHex: String
-    )
-
+    data class FoodItem(val name: String, val colorHex: String, val shape: String, val price: Int)
+    data class BodyItem(val name: String, val colorHex: String, val pattern: String, val price: Int)
     data class FullBodyItem(
         val name: String,
+        val dotHex: String,
         val colorHex: String,
-        val centerHex: String
+        val centerHex: String,
+        val pattern: String,
+        val size: Float,
+        val price: Int
     )
-
-    data class FoodItem(
-        val name: String,
-        val shape: String,
-        val colorHex: String
-    )
-
+    data class HeadItem(val name: String, val symbol: String, val colorHex: String, val price: Int)
     data class LevelConfig(
-        val level: Int,
-        val name: String,
+        val food: Int,
+        val body: Int,
+        val full: Int,
+        val head: Int,
         val bgHex: String,
         val trailHex: String,
         val speedBonus: Int,
-        val head: Int,
-        val body: Int,
-        val full: Int,
-        val food: Int
-    )
-
-    val heads = listOf(
-        HeadItem("Cyber Viper", "V", "#00ffff"),
-        HeadItem("Neon Cobra", "C", "#00ff88"),
-        HeadItem("Solar Fang", "S", "#ffcc00"),
-        HeadItem("Plasma Drake", "D", "#ff55aa")
-    )
-
-    val bodyItems = listOf(
-        BodyItem("Cyan Pulse", "#00bcd4"),
-        BodyItem("Emerald Scale", "#00e676"),
-        BodyItem("Gold Link", "#ffd54f"),
-        BodyItem("Violet Core", "#b388ff")
-    )
-
-    val fullBodies = listOf(
-        FullBodyItem("Matrix Ring", "#00e5ff", "#0a192f"),
-        FullBodyItem("Venom Node", "#69f0ae", "#0b2e1d"),
-        FullBodyItem("Amber Core", "#ffca28", "#2e2100"),
-        FullBodyItem("Nova Orb", "#ea80fc", "#280b30")
+        val name: String
     )
 
     val foodItems = listOf(
-        FoodItem("Energy Orb", "circle", "#ff4081"),
-        FoodItem("Prism Cube", "square", "#40c4ff"),
-        FoodItem("Diamond Gem", "diamond", "#ffd740"),
-        FoodItem("Delta Shard", "triangle", "#69f0ae"),
-        FoodItem("Star Core", "star", "#ff6e40")
+        FoodItem("Red Apple Round", "#ff1144", "apple", 100),
+        FoodItem("Yellow Star", "#ffeb3b", "star", 150),
+        FoodItem("Purple Diamond", "#aa00ff", "diamond", 200),
+        FoodItem("Cyan Heart", "#00e5ff", "heart", 250),
+        FoodItem("Green Triangle", "#00ff88", "triangle", 300),
+        FoodItem("Pink Square", "#ff88cc", "square", 350),
+        FoodItem("Orange Hexagon", "#ff9900", "hexagon", 400),
+        FoodItem("White Moon", "#ffffff", "moon", 450),
+        FoodItem("Blue Drop", "#0099ff", "drop", 500),
+        FoodItem("Lime Cross", "#aaff00", "cross", 550),
+        FoodItem("Gold Crown Food", "#ffcc00", "crown", 600),
+        FoodItem("Red Chilli", "#ff3300", "chilli", 650),
+        FoodItem("Blue Berry", "#00aaff", "berry", 700),
+        FoodItem("Yellow Lemon", "#ffff00", "lemon", 750),
+        FoodItem("Rainbow Mix", "#ff00ff", "rainbow", 800)
     )
 
-    val levels = listOf(
-        LevelConfig(1, "Neon Grid", "#0a0d16", "#00ffff", 0, 0, 0, 0, 0),
-        LevelConfig(2, "Emerald Circuit", "#07140e", "#00ff88", 3, 1, 1, 1, 3),
-        LevelConfig(3, "Golden Pulse", "#161106", "#ffcc00", 6, 2, 2, 2, 2),
-        LevelConfig(4, "Violet Matrix", "#12081a", "#ea80fc", 9, 3, 3, 3, 4),
-        LevelConfig(5, "Ice Breaker", "#061521", "#40c4ff", 12, 0, 0, 1, 1),
-        LevelConfig(6, "Crimson Core", "#1a070d", "#ff4081", 15, 3, 2, 3, 0),
-        LevelConfig(7, "Turbo Track", "#0b111e", "#00e5ff", 18, 1, 0, 2, 2),
-        LevelConfig(8, "Solar Flare", "#1c1205", "#ffab40", 21, 2, 2, 1, 4),
-        LevelConfig(9, "Shadow Node", "#0d0b14", "#b388ff", 24, 3, 3, 0, 1),
-        LevelConfig(10, "Hyper Venom", "#061912", "#1de9b6", 27, 1, 1, 2, 3),
-        LevelConfig(11, "Plasma Surge", "#18091c", "#ff55aa", 30, 3, 1, 3, 2),
-        LevelConfig(12, "Titanium Rush", "#09131c", "#80d8ff", 33, 0, 2, 0, 0),
-        LevelConfig(13, "Nova Storm", "#1a0d06", "#ff6e40", 36, 2, 3, 2, 4),
-        LevelConfig(14, "Quantum Drift", "#08171a", "#00ffff", 39, 1, 2, 1, 1),
-        LevelConfig(15, "Omega Overdrive", "#140712", "#ff4081", 42, 3, 3, 3, 4)
+    val bodyItems = listOf(
+        BodyItem("Solid Red", "#ff3300", "solid", 100),
+        BodyItem("Striped Yellow Black", "#ffeb3b", "striped", 150),
+        BodyItem("Dotted White", "#ffffff", "dotted", 200),
+        BodyItem("Gradient Cyan Blue", "#00e5ff", "gradient", 250),
+        BodyItem("Neon Glow Pink", "#ff88cc", "neon", 300),
+        BodyItem("Checker Green", "#00ff88", "checker", 350),
+        BodyItem("Ring Hollow Yellow", "#ffcc00", "ring", 400),
+        BodyItem("Wave Line Orange", "#ff9900", "wave", 450),
+        BodyItem("Zigzag Purple", "#aa00ff", "zigzag", 500),
+        BodyItem("Scales Pattern", "#00ffcc", "scales", 550),
+        BodyItem("Camo Pattern", "#55aa55", "camo", 600),
+        BodyItem("Fire Gradient", "#ff4400", "fire", 650),
+        BodyItem("Ice Blue Glow", "#00aaff", "ice", 700),
+        BodyItem("Galaxy Dot", "#5500ff", "galaxy", 750),
+        BodyItem("Rainbow Strip Final", "#ff00ff", "rainbow", 800)
     )
 
-    fun safeLevel(level: Int): LevelConfig {
-        val idx = (level.coerceIn(1, 15)) - 1
-        return levels.getOrElse(idx) { levels.first() }
-    }
+    val fullBodies = listOf(
+        FullBodyItem("Neon Dot Ring Pink", "#ff88cc", "#ff88cc", "#ffffff", "dotRing", 3.8f, 150),
+        FullBodyItem("Yellow 4 Micro Dot", "#ffffaa", "#ffcc00", "#ffffaa", "dotMicro4", 3.5f, 200),
+        FullBodyItem("White Small Star 5 Kona", "#ffffff", "#ffffff", "#ffffaa", "smallStar", 3.2f, 250),
+        FullBodyItem("Red Glow Dot Shadow", "#ff1144", "#ff1144", "#ffff00", "glowDot", 4.0f, 300),
+        FullBodyItem("White Orange Center Dot", "#ffffff", "#ffffff", "#ff9900", "dotCenter", 3.6f, 350),
+        FullBodyItem("Red Big Glow Yellow Center", "#ff0000", "#ff0000", "#ffeb3b", "bigGlow", 4.2f, 400),
+        FullBodyItem("Yellow Ring Hollow", "#ffcc00", "#ffcc00", "#ff6600", "ring", 3.8f, 450),
+        FullBodyItem("White Ball Micro Dot Small", "#ffffff", "#ffffff", "#ffffaa", "ballMicro", 3.4f, 500),
+        FullBodyItem("Orange Dot Solid", "#ff6600", "#ff6600", "#ff0000", "dot", 4.0f, 550),
+        FullBodyItem("Cyan Diamond Star Unique", "#00ffff", "#00ffff", "#ffffff", "diamondStar", 3.3f, 600),
+        FullBodyItem("Pink Ring Big Thick", "#ff55aa", "#ff55aa", "#ffff00", "ringBig", 4.1f, 650),
+        FullBodyItem("Yellow Brown Center Dot", "#ffeb3b", "#ffeb3b", "#553300", "dotCenter", 4.3f, 700),
+        FullBodyItem("White Pink 3 Dot Star", "#ffffff", "#ffffff", "#ff88cc", "starPink", 3.5f, 750),
+        FullBodyItem("White Small Dot Minimal", "#ffffee", "#ffffee", "#ffff00", "dotSmall", 3.2f, 800),
+        FullBodyItem("Final Pink Yellow Double Glow Border", "#ff1493", "#ff1493", "#ffcc00", "finalGlow", 4.5f, 900)
+    )
+
+    val heads = listOf(
+        HeadItem("Normal Round Yellow", "@", "#ffeb3b", 100),
+        HeadItem("Smile Cyan", "C", "#00ffff", 150),
+        HeadItem("Sleep Closed White", "-", "#ffffaa", 200),
+        HeadItem("Eyes Big OO White", "OO", "#ffffff", 250),
+        HeadItem("Angry Red ><", "><", "#ff3300", 300),
+        HeadItem("Star Yellow *", "*", "#ffeb3b", 350),
+        HeadItem("Heart Red H", "H", "#ff1144", 400),
+        HeadItem("SGS Logo Cyan SGS", "SGS", "#00ffff", 500),
+        HeadItem("Crown King Gold K", "K", "#ffcc00", 600),
+        HeadItem("Devil Red Horn D", "D", "#ff0000", 700)
+    )
+
+    val levelConfigs = listOf(
+        LevelConfig(0, 0, 0, 0, "#000000", "#ff88cc", 0, "Lv1 Neon Dot Ring - FREE"),
+        LevelConfig(1, 1, 1, 1, "#1a1200", "#ffcc00", 1, "Lv2 Yellow Micro4"),
+        LevelConfig(2, 2, 2, 2, "#001a1a", "#ffffff", 2, "Lv3 White Small Star"),
+        LevelConfig(3, 3, 3, 3, "#001a2a", "#00ffff", 3, "Lv4 Red Glow"),
+        LevelConfig(4, 4, 4, 4, "#0a1a00", "#55ff00", 4, "Lv5 White Orange"),
+        LevelConfig(5, 5, 5, 5, "#0f0f0f", "#aaaaaa", 5, "Lv6 Red Big Glow"),
+        LevelConfig(6, 6, 6, 6, "#1a0000", "#ff0000", 6, "Lv7 Yellow Ring"),
+        LevelConfig(7, 7, 7, 7, "#001a1a", "#ff00ff", 7, "Lv8 White Ball Micro"),
+        LevelConfig(8, 8, 8, 8, "#001a33", "#0099ff", 8, "Lv9 Orange Dot"),
+        LevelConfig(9, 9, 9, 9, "#330000", "#ff3300", 9, "Lv10 Cyan Diamond Star"),
+        LevelConfig(10, 10, 10, 0, "#0a1a0a", "#00ff88", 10, "Lv11 Pink Ring Big"),
+        LevelConfig(11, 11, 11, 1, "#331100", "#ff9900", 10, "Lv12 Yellow Brown"),
+        LevelConfig(12, 12, 12, 2, "#001133", "#00aaff", 11, "Lv13 White Pink Star"),
+        LevelConfig(13, 13, 13, 3, "#332200", "#ffcc00", 11, "Lv14 White Small Dot"),
+        LevelConfig(14, 14, 14, 9, "#220000", "#ff1493", 12, "Lv15 Final Glow")
+    )
+
+    fun safeLevelIndex(lv: Int): Int = (lv - 1).coerceIn(0, 14)
+    fun safeLevel(lv: Int): LevelConfig = levelConfigs[safeLevelIndex(lv)]
 
     fun encodeCoins(coins: Int): String {
         val safe = coins.coerceAtLeast(0)
-        val raw = "SGS_PC:$safe:${safe * 7 + 13}"
+        val raw = ((safe * 7) + 123).toString()
         return Base64.encodeToString(raw.toByteArray(Charsets.UTF_8), Base64.NO_WRAP)
     }
 
     fun decodeCoins(encoded: String?): Int {
         if (encoded.isNullOrBlank()) return START_COINS
         return try {
-            val decoded = String(Base64.decode(encoded, Base64.DEFAULT), Charsets.UTF_8)
-            val parts = decoded.split(":")
-            if (parts.size >= 3 && parts[0] == "SGS_PC") {
-                val value = parts[1].toIntOrNull() ?: return START_COINS
-                val check = parts[2].toIntOrNull() ?: return START_COINS
-                if (value >= 0 && check == value * 7 + 13) value else START_COINS
-            } else {
-                START_COINS
-            }
+            val rawStr = String(Base64.decode(encoded, Base64.DEFAULT), Charsets.UTF_8).trim()
+            val num = rawStr.toIntOrNull() ?: return START_COINS
+            val decoded = (num - 123) / 7
+            if (decoded >= 0) decoded else START_COINS
         } catch (_: Exception) {
             START_COINS
         }
