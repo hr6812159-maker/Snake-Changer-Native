@@ -184,13 +184,13 @@ class MainActivity : AppCompatActivity() {
                 DrawerLayout.LayoutParams.MATCH_PARENT
             )
             orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER_HORIZONTAL
-            setPadding(dp(10), dp(12), dp(10), dp(10))
+            gravity = Gravity.CENTER_HORIZONTAL or Gravity.BOTTOM
+            setPadding(dp(10), dp(96), dp(10), dp(14))
             setBackgroundColor(Color.parseColor("#080810"))
         }
 
         val topSpaceAndNav = LinearLayout(this).apply {
-            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(156)).apply {
+            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(112)).apply {
                 bottomMargin = dp(10)
             }
             orientation = LinearLayout.VERTICAL
@@ -199,7 +199,7 @@ class MainActivity : AppCompatActivity() {
 
         val topNavRow = LinearLayout(this).apply {
             layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-                topMargin = dp(56)
+                topMargin = dp(24)
             }
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
