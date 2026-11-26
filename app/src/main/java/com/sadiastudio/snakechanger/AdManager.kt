@@ -74,7 +74,7 @@ class AdManager(private val activity: Activity) {
         }
 
         topAdWebView = adWebView
-        rootGroup.addView(adWebView)
+                rootGroup?.addView(adWebView)
     }
 
     // Rewarded Ad ONLY for Spin Wheel
