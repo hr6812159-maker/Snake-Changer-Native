@@ -104,7 +104,7 @@ class NotificationHelper(private val context: Context) {
 
     private fun buildReminderPendingIntent(): PendingIntent {
         val intent = Intent(context, ReminderReceiver::class.java).apply {
-            action = "${GameData.PACKAGE_NAME}.ACTION_24H_REMINDER"
+            action = "${context.packageName}.ACTION_24H_REMINDER"
         }
         val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
