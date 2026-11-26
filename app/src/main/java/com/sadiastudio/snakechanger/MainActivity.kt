@@ -61,7 +61,7 @@ class MainActivity : AppCompatActivity() {
     private var loadingFinished = false
     private var wheelAnimator: ValueAnimator? = null
 
-    private var coins: Int = GameData.START_COINS
+    private var coins: Int = 500
     private var highScore: Int = 0
     private var currentLevel: Int = 1
     private var selectedFood: Int = 0
@@ -100,11 +100,13 @@ class MainActivity : AppCompatActivity() {
             "SGS-$randomPart".also { prefs.edit().putString("sgs_player_id", it).apply() }
         }
 
+        val startCoins = 500
         val encCoins = prefs.getString("sgs_secure_c", null)
         coins = if (encCoins == null) {
-            val legacy = prefs.getInt("c", GameData.START_COINS)
-            GameData.encodeCoins(legacy).also { prefs.edit().putString("sgs_secure_c", it).apply() }
-            legacy
+            val legacy = prefs.getInt("c", startCoins)
+            val initial = if (legacy == GameData.START_COINS) startCoins else legacy
+            GameData.encodeCoins(initial).also { prefs.edit().putString("sgs_secure_c", it).apply() }
+            initial
         } else {
             GameData.decodeCoins(encCoins)
         }
@@ -1047,10 +1049,12 @@ class MainActivity : AppCompatActivity() {
             when (activeTab) {
                 0 -> GameData.foodItems.forEachIndexed { idx, item ->
                     val unlocked = isItemUnlocked("fP", idx) || idx == 0
+                    val equipped = selectedFood == idx
                     body.addView(makeShopRow(
                         title = "${item.name} - ${item.shape} - ${item.price} Coin",
                         colorHex = item.colorHex,
                         unlocked = unlocked,
+                        equipped = equipped,
                         price = item.price
                     ) {
                         if (unlocked) {
@@ -1073,10 +1077,12 @@ class MainActivity : AppCompatActivity() {
 
                 1 -> GameData.bodyItems.forEachIndexed { idx, item ->
                     val unlocked = isItemUnlocked("bP", idx) || idx == 0
+                    val equipped = selectedBody == idx
                     body.addView(makeShopRow(
                         title = "${item.name} - ${item.pattern} - ${item.price} Coin",
                         colorHex = item.colorHex,
                         unlocked = unlocked,
+                        equipped = equipped,
                         price = item.price
                     ) {
                         if (unlocked) {
@@ -1099,10 +1105,12 @@ class MainActivity : AppCompatActivity() {
 
                 2 -> GameData.fullBodies.forEachIndexed { idx, item ->
                     val unlocked = isItemUnlocked("fbP", idx) || idx == 0
+                    val equipped = selectedFull == idx
                     body.addView(makeShopRow(
                         title = "${item.name} - ${item.pattern} - ${item.price} Coin",
                         colorHex = item.dotHex,
                         unlocked = unlocked,
+                        equipped = equipped,
                         price = item.price
                     ) {
                         if (unlocked) {
@@ -1125,10 +1133,12 @@ class MainActivity : AppCompatActivity() {
 
                 else -> GameData.heads.forEachIndexed { idx, item ->
                     val unlocked = isItemUnlocked("hP", idx) || idx == 0
+                    val equipped = selectedHead == idx
                     body.addView(makeShopRow(
                         title = "Head ${item.name} ${item.emoji} - ${item.price} Coin",
                         colorHex = item.colorHex,
                         unlocked = unlocked,
+                        equipped = equipped,
                         price = item.price
                     ) {
                         if (unlocked) {
@@ -1367,6 +1377,7 @@ class MainActivity : AppCompatActivity() {
         title: String,
         colorHex: String,
         unlocked: Boolean,
+        equipped: Boolean,
         price: Int,
         onClick: () -> Unit
     ): LinearLayout {
@@ -1382,7 +1393,7 @@ class MainActivity : AppCompatActivity() {
                 intArrayOf(Color.parseColor("#15151f"), Color.parseColor("#1a1a2e"))
             ).apply {
                 cornerRadius = dp(12).toFloat()
-                setStroke(dp(1), Color.parseColor("#222222"))
+                setStroke(dp(1), Color.parseColor(if (equipped) "#00ff88" else "#222222"))
             }
 
             val dot = View(this@MainActivity).apply {
@@ -1400,18 +1411,24 @@ class MainActivity : AppCompatActivity() {
                 textSize = 10f
             })
 
+            val btnLabel = when {
+                equipped -> "EQUIPPED"
+                unlocked -> "USE"
+                else -> "$price COIN"
+            }
+            val btnBg = when {
+                equipped -> "#00ff88"
+                unlocked -> "#ffeb3b"
+                else -> "#00ffff"
+            }
+
             addView(Button(this@MainActivity).apply {
-                text = if (unlocked) "USING" else "$price COIN"
+                text = btnLabel
                 setTextColor(Color.BLACK)
                 textSize = 10f
                 typeface = Typeface.DEFAULT_BOLD
                 setPadding(dp(12), dp(6), dp(12), dp(6))
-                background = makeBoxDrawable(
-                    if (unlocked) "#ffeb3b" else "#00ffff",
-                    if (unlocked) "#ffeb3b" else "#00ffff",
-                    18f,
-                    0
-                )
+                background = makeBoxDrawable(btnBg, btnBg, 18f, 0)
                 setOnClickListener { onClick() }
             })
         }
