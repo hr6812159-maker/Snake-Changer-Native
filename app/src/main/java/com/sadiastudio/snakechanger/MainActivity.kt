@@ -165,17 +165,6 @@ class MainActivity : AppCompatActivity() {
                 ViewGroup.LayoutParams.MATCH_PARENT
             )
             setScrimColor(Color.argb(170, 0, 0, 0))
-            addDrawerListener(object : DrawerLayout.SimpleDrawerListener() {
-                override fun onDrawerOpened(drawerView: View) {
-                    adManager.setTopBannerVisible(false)
-                }
-
-                override fun onDrawerClosed(drawerView: View) {
-                    if (panelContainer.visibility != View.VISIBLE && loadingOverlay.visibility != View.VISIBLE) {
-                        adManager.setTopBannerVisible(true)
-                    }
-                }
-            })
         }
 
         val mainColumn = LinearLayout(this).apply {
@@ -205,14 +194,12 @@ class MainActivity : AppCompatActivity() {
             gravity = Gravity.CENTER_VERTICAL
         }
         val leftMenuBtn = makeSmallActionBtn("MENU") {
-            adManager.setTopBannerVisible(false)
             drawerLayout.openDrawer(GravityCompat.START)
         }
         val topSpacer = View(this).apply {
             layoutParams = LinearLayout.LayoutParams(0, dp(1), 1f)
         }
         val rightSetBtn = makeSmallActionBtn("SET") {
-            adManager.setTopBannerVisible(false)
             drawerLayout.openDrawer(GravityCompat.END)
         }
         topNavRow.addView(leftMenuBtn)
@@ -464,7 +451,6 @@ class MainActivity : AppCompatActivity() {
             })
             addView(makeDrawerBtn("EXIT APP", "#ff4444", "#ffffff") {
                 drawerLayout.closeDrawers()
-                adManager.setTopBannerVisible(true)
                 showExitConfirmDialog()
             })
         }
@@ -491,12 +477,10 @@ class MainActivity : AppCompatActivity() {
             })
             addView(makeDrawerBtn("SOUND ON/OFF", "#15151f", "#00ffff") {
                 drawerLayout.closeDrawers()
-                adManager.setTopBannerVisible(true)
                 toggleSound()
             })
             addView(makeDrawerBtn("OK PAUSE/PLAY", "#00ffff", "#000000") {
                 drawerLayout.closeDrawers()
-                adManager.setTopBannerVisible(true)
                 gameView.togglePauseMatch()
             })
         }
@@ -678,7 +662,6 @@ class MainActivity : AppCompatActivity() {
         loadingFinished = true
         loadingTimer?.let { uiHandler.removeCallbacks(it) }
         loadingOverlay.visibility = View.GONE
-        adManager.setTopBannerVisible(true)
         syncAllUi()
         gameView.startNewMatch(autoBegin = false)
     }
@@ -1177,7 +1160,6 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showPanel(title: String, populate: (LinearLayout) -> Unit) {
-        adManager.setTopBannerVisible(false)
         panelContainer.removeAllViews()
         panelContainer.visibility = View.VISIBLE
 
@@ -1236,7 +1218,6 @@ class MainActivity : AppCompatActivity() {
         wheelAnimator?.cancel()
         panelContainer.visibility = View.GONE
         panelContainer.removeAllViews()
-        adManager.setTopBannerVisible(true)
         gameView.invalidate()
     }
 
@@ -1278,7 +1259,6 @@ class MainActivity : AppCompatActivity() {
         }
         if (drawerLayout.isDrawerOpen(GravityCompat.START) || drawerLayout.isDrawerOpen(GravityCompat.END)) {
             drawerLayout.closeDrawers()
-            adManager.setTopBannerVisible(true)
             return
         }
         showExitConfirmDialog()
@@ -1294,7 +1274,6 @@ class MainActivity : AppCompatActivity() {
         wheelAnimator?.cancel()
         loadingTimer?.let { uiHandler.removeCallbacks(it) }
         gameView.stopLoop()
-        adManager.destroy()
     }
 
     private fun makeControlButton(label: String, isOk: Boolean, onClick: () -> Unit): Button {
