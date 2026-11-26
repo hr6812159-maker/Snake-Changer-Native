@@ -14,6 +14,7 @@ object GameData {
     const val MONETAG_BASE_URL = "https://hr6812159-maker.github.io"
     const val MONETAG_META_TAG = "monetag"
     const val MONETAG_SCRIPT_SRC = "https://nap5k.com/tag.min.js"
+    const val BANNER_ZONE_ID = "12205061"
     const val SPIN_REWARD_ZONE_ID = "12205081"
 
     const val START_COINS = 5
