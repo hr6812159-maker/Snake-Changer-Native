@@ -53,7 +53,7 @@ object GameData {
     const val BANNER_ZONE_ID = "12205061"
     const val SPIN_REWARD_ZONE_ID = "12205081"
 
-    const val START_COINS = 4500
+    const val START_COINS = 500
     const val FOOD_EARN = 50
     const val SPECIAL_COIN_EARN = 200
     const val RATE_BONUS_COINS = 300
