@@ -82,7 +82,7 @@ class AdManager(private val activity: Activity) {
         }
 
         topAdWebView = adWebView
-        rootGroup.addView(adWebView)
+                rootGroup?.addView(adWebView)
     }
 
     fun showSpinRewardedAd(onRewardGranted: () -> Unit) {
